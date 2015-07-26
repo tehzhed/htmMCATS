@@ -1,0 +1,26 @@
+BenchId = 0	NumThread = 1	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0	StatsCounter = 0 Time = 14.791464
+BenchId = 0	NumThread = 2	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0	StatsCounter = 0 Time = 14.667918
+BenchId = 0	NumThread = 3	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0	StatsCounter = 0 Time = 13.860613
+BenchId = 0	NumThread = 4	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489220	aborted = 0	aborts = 0 Time = 23.029002
+BenchId = 0	NumThread = 5	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489221	aborted = 0	aborts = 0 Time = 26.268572
+BenchId = 0	NumThread = 6	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 23.948608
+BenchId = 0	NumThread = 7	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489219	aborted = 0	aborts = 0 Time = 24.721825
+BenchId = 0	NumThread = 8	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489220	aborted = 0	aborts = 0 Time = 34.824890
+genome
+BenchId = 0	NumThread = 1	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 14.214100
+genome
+BenchId = 0	NumThread = 1	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 13.721409
+BenchId = 0	NumThread = 2	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 23.744420
+genome
+BenchId = 0	NumThread = 1	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 13.165192
+BenchId = 0	NumThread = 2	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 23.213989
+BenchId = 0	NumThread = 3	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 17.915682
+BenchId = 0	NumThread = 4	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489220	aborted = 0	aborts = 0 Time = 24.294547
+BenchId = 0	NumThread = 5	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489221	aborted = 0	aborts = 0 Time = 25.064998
+BenchId = 0	NumThread = 6	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 27.567987
+genome
+genome
+BenchId = 0	NumThread = 1	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 14.367574
+BenchId = 0	NumThread = 1	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 17.109464
+genome
+BenchId = 0	NumThread = 1	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 17.021397
