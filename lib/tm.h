@@ -96,6 +96,13 @@ unsigned long aborted_txs = 0; \
         thread_metadata_t* myStats = &statistics; \
         int cycles = 0; \
         int tries = MAX_ATTEMPTS; \
+        if (1 || myStats->i_am_the_collector_thread) { \
+        	tm_time_t last_timer_value = TM_TIMER_READ(); \
+        	myStats->total_no_tx_time+= last_timer_value - myStats->last_timer_value; \
+        	myStats->last_timer_value=last_timer_value; \
+        	printf("\ntimer %llu\n)", last_timer_value); \
+        	fflush(stdout); \
+		} \
         while (1) { \
             if (IS_LOCKED(is_fallback)) { \
             	while (IS_LOCKED(is_fallback)) { \

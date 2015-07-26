@@ -24,3 +24,4 @@ BenchId = 0	NumThread = 1	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	abo
 BenchId = 0	NumThread = 1	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 17.109464
 genome
 BenchId = 0	NumThread = 1	AttBefGlLock = 5	APriLockAtt = 1 Commits = 2489218	aborted = 0	aborts = 0 Time = 17.021397
+genome
