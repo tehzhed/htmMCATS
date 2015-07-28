@@ -108,15 +108,17 @@ __attribute__((aligned(64))) short globalLocksToAcquire[NUMBER_ATOMIC_BLOCKS][NU
 
 // MCATS code start
 __attribute__((aligned(64))) thread_metadata_t statistics[NUMBER_THREADS];
-__attribute__((aligned(64))) unsigned long tx_cluster_table[NUMBER_ATOMIC_BLOCKS][2];
+__attribute__((aligned(64))) static volatile unsigned long tx_cluster_table[NUMBER_ATOMIC_BLOCKS][2];
 __attribute__((aligned(64))) unsigned long runs_limit;
 __attribute__((aligned(64))) unsigned long main_thread;
 __attribute__((aligned(64))) unsigned long current_collector_thread;
 // MCATS code end
 
 int benchmarkId;
+int current_collector_thread_id;
 int MAX_ATTEMPTS;
 int APRIORI_ATTEMPTS;
+int TXS_PER_MCATS_TUNING_CYCLE;
 
 thread_args_t* threadArgsArr;
 
@@ -143,14 +145,6 @@ threadWait (void* argPtr)
     bindThread(threadId);
 
     thread_metadata_t* myStats = &(statistics[myThreadId]);
-	myStats->wait_cycles=1;
-    myStats->totalAborts=0;
-	myStats->abortedTxs=0;
-	myStats->totalCommits=0;
-	myStats->total_useful_time=0;
-	myStats->total_no_tx_time=0;
-	myStats->total_wasted_time=0;
-
 
     while (1) {
         THREAD_BARRIER(global_barrierPtr, threadId); /* wait for start parallel */

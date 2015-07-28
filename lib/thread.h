@@ -156,15 +156,28 @@ typedef struct thread_metadata {
     long abortedTxs;
     long totalCommits;
     long i_am_the_collector_thread;
+    long i_am_waiting;
+    long first_tx_run;
     char suffixPadding[64];
     unsigned long updateStatsCounter;
     // MCATS code start
-    unsigned long total_useful_time;
-    unsigned long total_no_tx_time;
-    unsigned long total_wasted_time;
-    unsigned long last_timer_value;
 
+    unsigned long total_wasted_time_per_active_transactions_per_tuning_cycle[NUMBER_THREADS];
+    unsigned long total_useful_time_per_active_transactions_per_tuning_cycle[NUMBER_THREADS];
+    unsigned long total_committed_txs_per_active_transactions_per_tuning_cycle[NUMBER_THREADS];
+    unsigned long total_aborted_txs_per_active_transactions_per_tuning_cycle[NUMBER_THREADS];
+
+    unsigned long total_useful_time_per_tuning_cycle;
+    unsigned long total_no_tx_time_per_tuning_cycle;
+    unsigned long total_wasted_time_per_tuning_cycle;
+    unsigned long total_spin_time_per_tuning_cycle;
+    unsigned long first_start_tx_time;
+    unsigned long last_start_tx_time;
+    unsigned long start_no_tx_time;
     unsigned long wait_cycles;
+    unsigned long commits_per_tuning_cycle;
+    unsigned long aborted_txs_per_tuning_cycle;
+	unsigned long aborts_per_tuning_cycle;
     // MCATS code end
 
 } __attribute__((aligned(64))) thread_metadata_t;
@@ -191,11 +204,14 @@ extern __attribute__((aligned(64))) double uncondAbortProb[NUMBER_ATOMIC_BLOCKS]
 extern __attribute__((aligned(64))) short globalLocksToAcquire[NUMBER_ATOMIC_BLOCKS][NUMBER_ATOMIC_BLOCKS];
 */
 extern int benchmarkId;
+extern int current_collector_thread_id;
 extern int MAX_ATTEMPTS;
 extern int APRIORI_ATTEMPTS;
+extern int TXS_PER_MCATS_TUNING_CYCLE;
 
 // MCATS code start
 extern __attribute__((aligned(64))) thread_metadata_t statistics[NUMBER_THREADS];
+extern __attribute__((aligned(64))) static volatile unsigned long tx_cluster_table[NUMBER_ATOMIC_BLOCKS][2];
 // MCATS code end
 
 /*
