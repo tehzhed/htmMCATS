@@ -106,14 +106,6 @@ __attribute__((aligned(64))) double uncondAbortProb[NUMBER_ATOMIC_BLOCKS][NUMBER
 __attribute__((aligned(64))) short globalLocksToAcquire[NUMBER_ATOMIC_BLOCKS][NUMBER_ATOMIC_BLOCKS];
 */
 
-// MCATS code start
-__attribute__((aligned(64))) thread_metadata_t statistics[NUMBER_THREADS];
-__attribute__((aligned(64))) static volatile unsigned long tx_cluster_table[NUMBER_ATOMIC_BLOCKS][2];
-__attribute__((aligned(64))) unsigned long runs_limit;
-__attribute__((aligned(64))) unsigned long main_thread;
-__attribute__((aligned(64))) unsigned long current_collector_thread;
-// MCATS code end
-
 int benchmarkId;
 int current_collector_thread_id;
 int MAX_ATTEMPTS;
@@ -144,8 +136,6 @@ threadWait (void* argPtr)
 
     bindThread(threadId);
 
-    thread_metadata_t* myStats = &(statistics[myThreadId]);
-
     while (1) {
         THREAD_BARRIER(global_barrierPtr, threadId); /* wait for start parallel */
         if (global_doShutdown) {
@@ -171,12 +161,6 @@ thread_startup (long numThread)
     int i;
     int k;
     int l,m;
-
-    for (i = 0; i < NUMBER_THREADS; i++) {
-        statistics[i].totalCommits = 0;
-        statistics[i].abortedTxs = 0;
-        statistics[i].totalAborts = 0;
-    }
 
     global_numThread = numThread;
     global_doShutdown = FALSE;

@@ -39,6 +39,43 @@
 
 // MCATS code start
 
+typedef struct thread_metadata {
+    long totalAborts;
+    long abortedTxs;
+    long totalCommits;
+    long i_am_the_collector_thread;
+    long i_am_waiting;
+    long first_tx_run;
+    char suffixPadding[64];
+    unsigned long updateStatsCounter;
+    // MCATS code start
+
+    unsigned long total_wasted_time_per_active_transactions_per_tuning_cycle[NUMBER_THREADS+1];
+    unsigned long total_useful_time_per_active_transactions_per_tuning_cycle[NUMBER_THREADS+1];
+    unsigned long total_committed_txs_per_active_transactions_per_tuning_cycle[NUMBER_THREADS+1];
+    unsigned long total_aborted_txs_per_active_transactions_per_tuning_cycle[NUMBER_THREADS+1];
+
+    unsigned long total_useful_time_per_tuning_cycle;
+    unsigned long total_no_tx_time_per_tuning_cycle;
+    unsigned long total_wasted_time_per_tuning_cycle;
+    unsigned long total_spin_time_per_tuning_cycle;
+    unsigned long first_start_tx_time;
+    unsigned long last_start_tx_time;
+    unsigned long start_no_tx_time;
+    unsigned long wait_cycles;
+    unsigned long commits_per_tuning_cycle;
+    unsigned long aborted_txs_per_tuning_cycle;
+	unsigned long aborts_per_tuning_cycle;
+    // MCATS code end
+
+} __attribute__((aligned(64))) thread_metadata_t;
+
+__attribute__((aligned(64))) thread_metadata_t statistics[NUMBER_THREADS];
+__attribute__((aligned(64))) static volatile unsigned long tx_cluster_table[NUMBER_ATOMIC_BLOCKS][2];
+__attribute__((aligned(64))) unsigned long runs_limit;
+__attribute__((aligned(64))) unsigned long main_thread;
+__attribute__((aligned(64))) unsigned long current_collector_thread;
+
 typedef unsigned long tm_time_t;
 
 #define TM_TIMER_READ() ({ \
@@ -56,7 +93,13 @@ typedef unsigned long tm_time_t;
         MAX_ATTEMPTS = TOTAL_ATTEMPTS; \
         APRIORI_ATTEMPTS = APRIORI_LOCK_ATTEMPTS; \
         TXS_PER_MCATS_TUNING_CYCLE = TXS_PER_TUNING_CYCLE/NUMBER_THREADS; \
-    	RESET_STATS(); \
+        int i; \
+		for (i = 0; i < NUMBER_THREADS; i++) { \
+			statistics[i].totalCommits = 0; \
+			statistics[i].abortedTxs = 0; \
+			statistics[i].totalAborts = 0; \
+		} \
+    	RESET_THREADS_STATS(); \
         printf("BenchId = %d\tNumThread = %d\tAttBefGlLock = %d\tAPriLockAtt = %d ",benchmarkId, numThread, MAX_ATTEMPTS, APRIORI_ATTEMPTS); \
 }
 
@@ -96,21 +139,17 @@ unsigned long aborted_txs = 0; \
 # define AL_LOCK(idx)
 
 
-
 #define TM_WAIT() { \
     thread_metadata_t* myStats = &(statistics[myThreadId]); \
 	int active_txs,entered=0; \
 	tm_time_t start_spin_time; \
 	active_txs=tx_cluster_table[0][0]; \
 	if(active_txs<tx_cluster_table[0][1]){ \
-		printf("\nThread %i entered1, txs %i, active_txs %i", myThreadId, myStats->commits_per_tuning_cycle, active_txs); \
-		fflush(stdout); \
 		if (__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs+1) == active_txs) { \
 			if(myStats->i_am_the_collector_thread){ \
-				myStats->first_start_tx_time=myStats->last_start_tx_time=start_spin_time=TM_TIMER_READ(); \
-				myStats->total_no_tx_time_per_tuning_cycle+=start_spin_time - myStats->start_no_tx_time; \
+				myStats->first_start_tx_time=myStats->last_start_tx_time=TM_TIMER_READ(); \
+				myStats->total_no_tx_time_per_tuning_cycle+=myStats->first_start_tx_time - myStats->start_no_tx_time; \
 			} \
-			fflush(stdout); \
 			entered=1; \
 		} \
 	} \
@@ -122,13 +161,8 @@ unsigned long aborted_txs = 0; \
 		int wait_cycles=myStats->wait_cycles, i=1; \
 		while(1) { \
 			active_txs=tx_cluster_table[0][0]; \
-			printf("\nThread %i waiting, txs %i, tx_cluster_table[0][0] %i", myThreadId, myStats->commits_per_tuning_cycle, tx_cluster_table[0][0]); \
-			fflush(stdout); \
-			getchar(); \
 			if(active_txs<tx_cluster_table[0][1]) \
 				if (__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs+1) == active_txs) { \
-					printf("\nThread %i entered2, txs %i, active_txs %i", myThreadId, myStats->commits_per_tuning_cycle, active_txs); \
-					fflush(stdout); \
 					break; \
 				} \
 				myStats->i_am_waiting=1; \
@@ -139,33 +173,145 @@ unsigned long aborted_txs = 0; \
 		} \
 	} \
 	if (myStats->i_am_the_collector_thread==1){ \
-		if (entered==0) myStats->first_start_tx_time=myStats->last_start_tx_time=TM_TIMER_READ(); \
-		myStats->start_no_tx_time=0; \
-		myStats->total_spin_time_per_tuning_cycle+=myStats->first_start_tx_time-start_spin_time; \
+		if (entered==0) { \
+			myStats->first_start_tx_time=myStats->last_start_tx_time=TM_TIMER_READ(); \
+			myStats->total_spin_time_per_tuning_cycle+=myStats->first_start_tx_time-start_spin_time; \
+		} \
 	} \
-	getchar(); \
+}
+
+float get_throughput(float lambda, float *mu, int m) {
+	float *c=(float*)malloc(sizeof(float)*NUMBER_THREADS+1);
+	float *p=(float*)malloc(sizeof(float)*NUMBER_THREADS+1);
+	float th=0;
+	int k;
+	//a_k
+	c[0]=1; //auxiliar
+	float a=0.0,b=0.0;
+	for (k=1;k<=NUMBER_THREADS;k++){
+			if(k<=m){
+				c[k]= c[k-1] * (lambda*((float)NUMBER_THREADS-k+1)/(k * mu[k]));
+				a+=c[k];
+			}else{
+				c[k]=c[k-1] * (lambda*((float)NUMBER_THREADS-k+1)/(m * mu[m]));
+				b+=c[k];
+			}
+	}
+	p[0]=1/(1+a+b);
+	for (k=1;k<=NUMBER_THREADS;k++){
+		p[k]=p[0]*c[k];
+	}
+
+	//th
+	for (k=1;k<=m;k++){
+		th+=p[k]*k*mu[k];
+	}
+	for (k=m+1;k<=NUMBER_THREADS;k++){
+		th+=p[k]*m*mu[m];
+	}
+	return th;
 }
 
 #define TUNE_MCATS() { \
 	printf("\nTuning ... Current_collector_thread_id %i", current_collector_thread_id); \
-	int t; \
-	for (t = 0; t < NUMBER_THREADS; t++) { \
-		printf("\nThread %i",t); \
-		printf("\ntotal_useful_time_per_tuning_cycle %llu",statistics[t].total_useful_time_per_tuning_cycle); \
-		printf("\ntotal_no_tx_time_per_tuning_cycle %llu",statistics[t].total_no_tx_time_per_tuning_cycle); \
-		printf("\ntotal_wasted_time_per_tuning_cycle %llu",statistics[t].total_wasted_time_per_tuning_cycle); \
-		printf("\ntotal_spin_time_per_tuning_cycle %llu",statistics[t].total_spin_time_per_tuning_cycle=0); \
-		printf("\ncommits_per_tuning_cycle %llu",statistics[t].commits_per_tuning_cycle); \
-		printf("\naborted_txs_per_tuning_cycle %llu",statistics[t].aborted_txs_per_tuning_cycle); \
-		printf("\naborts_per_tuning_cycle %llu",statistics[t].aborts_per_tuning_cycle); \
-	} \
+	int t,s; \
 	fflush(stdout); \
+	int m=tx_cluster_table[0][1]; \
+	tm_time_t total_tx_wasted_time=0; \
+	tm_time_t total_tx_time=0; \
+	tm_time_t total_no_tx_time=0; \
+	tm_time_t total_tx_spin_time=0; \
+	long tx_committed_table=0; \
+	long tx_conflict_table_times=0; \
+	float avg_running_tx=0; \
+	tm_time_t *wasted_time_k=(tm_time_t *)malloc((NUMBER_THREADS+1)*sizeof(tm_time_t)); \
+	tm_time_t *useful_time_k=(tm_time_t *)malloc((NUMBER_THREADS+1)*sizeof(tm_time_t)); \
+	long * conflict_active_threads=(long *)malloc((NUMBER_THREADS + 1) * sizeof(long)); \
+	long * commit_active_threads=(long *)malloc((NUMBER_THREADS + 1) * sizeof(long)); \
+	memset(conflict_active_threads, 0, (NUMBER_THREADS+1) * sizeof(long)); \
+	memset(commit_active_threads, 0, (NUMBER_THREADS+1) * sizeof(long)); \
+	memset(wasted_time_k, 0, (NUMBER_THREADS+1) * sizeof(tm_time_t)); \
+	memset(useful_time_k, 0, (NUMBER_THREADS+1) * sizeof(tm_time_t));	 \
+	for (t = 0; t < NUMBER_THREADS; t++) { \
+		total_tx_time+=statistics[t].total_useful_time_per_tuning_cycle; \
+		total_no_tx_time+=statistics[t].total_no_tx_time_per_tuning_cycle; \
+		total_tx_wasted_time+=statistics[t].total_wasted_time_per_tuning_cycle; \
+		total_tx_spin_time+=statistics[t].total_spin_time_per_tuning_cycle; \
+		tx_committed_table+=statistics[t].commits_per_tuning_cycle; \
+		tx_conflict_table_times+=statistics[t].aborts_per_tuning_cycle; \
+		int s; \
+		printf("\nThread %i", t); \
+		for (s = 0; s < NUMBER_THREADS+1; s++) { \
+			wasted_time_k[s]+=statistics[t].total_wasted_time_per_active_transactions_per_tuning_cycle[s]; \
+			printf("\tw %llu", statistics[t].total_wasted_time_per_active_transactions_per_tuning_cycle[s]); \
+			useful_time_k[s]+=statistics[t].total_useful_time_per_active_transactions_per_tuning_cycle[s]; \
+			printf("\tu %llu", statistics[t].total_useful_time_per_active_transactions_per_tuning_cycle[s]); \
+			commit_active_threads[s]+=statistics[t].total_committed_txs_per_active_transactions_per_tuning_cycle[s]; \
+			printf("\tc %llu", statistics[t].total_committed_txs_per_active_transactions_per_tuning_cycle[s]); \
+			conflict_active_threads[s]+=statistics[t].total_aborted_txs_per_active_transactions_per_tuning_cycle[s]; \
+			printf("\ta %llu", statistics[t].total_aborted_txs_per_active_transactions_per_tuning_cycle[s]); \
+			printf(" |"); \
+		} \
+	} \
+	tm_time_t t_wasted_time_k=0; \
+	tm_time_t t_useful_time_k=0; \
+	long t_commit_active_threads=0; \
+	long t_conflict_active_threads=0; \
+	for (s = 0; s < NUMBER_THREADS+1; s++) { \
+		t_wasted_time_k+=wasted_time_k[s]; \
+		t_useful_time_k+=useful_time_k[s]; \
+		t_commit_active_threads+=commit_active_threads[s]; \
+		t_conflict_active_threads+=conflict_active_threads[s]; \
+	} \
+	printf("\n-------------"); \
+	printf("\ntotal_useful_time_per_tuning_cycle %llu %llu",total_tx_time, t_useful_time_k); \
+	printf("\ntotal_no_tx_time_per_tuning_cycle %llu",total_no_tx_time); \
+	printf("\ntotal_wasted_time_per_tuning_cycle %llu %llu",total_tx_wasted_time, t_wasted_time_k); \
+	printf("\ntotal_spin_time_per_tuning_cycle %llu",total_tx_spin_time); \
+	printf("\ncommits_per_tuning_cycle %llu %llu",tx_committed_table, t_commit_active_threads); \
+	printf("\naborted_txs_per_tuning_cycle %llu %llu",tx_conflict_table_times, t_conflict_active_threads); \
+	fflush(stdout); \
+	float *mu_k=(float*)malloc((NUMBER_THREADS+1) * sizeof(float)); \
+	float lambda = 1.0 / (((float) total_no_tx_time/(float)1000000)/(float) tx_committed_table); \
+	for (i=0;i<NUMBER_THREADS+1;i++){ \
+		if((wasted_time_k[i]>0 || useful_time_k[i]>0) && commit_active_threads[i] > 0){ \
+			mu_k[i]= 1.0 / ((((float) wasted_time_k[i] / (float)1000000) / (float)commit_active_threads[i]) + (((float) useful_time_k[i]/(float)1000000) / (float) commit_active_threads[i])); \
+		}else{ \
+			mu_k[i]= 1.0 / ((((float)total_tx_wasted_time/(float)1000000)/(float)tx_committed_table)+(((float)total_tx_time/(float)1000000) / (float) tx_committed_table)); \
+		} \
+	} \
+	float th = get_throughput(lambda,mu_k,m); \
+	float th_minus_1=0.0,th_plus_1=0.0,th_minus_2=0.0; \
+	if(m>3){ \
+		th_minus_1=get_throughput(lambda,mu_k,m-1); \
+		th_minus_2=get_throughput(lambda,mu_k,m-2); \
+	}else if(m>2)th_minus_1=get_throughput(lambda,mu_k,m-1); \
+	if(th_minus_2 >= th && th_minus_2 >= th_minus_1) { \
+		tx_cluster_table[0][1]-=2; \
+	}else if(th_minus_1>=th){ \
+		tx_cluster_table[0][1]--; \
+	}else if(m<NUMBER_THREADS){ \
+		float avg_restart_k= (float)conflict_active_threads[m]/(float)commit_active_threads[m]; \
+		float p_a_k = avg_restart_k /(1.0 + avg_restart_k); \
+		float p_a_1 = 1- pow(1-p_a_k,1.0/(double)(m-1)); \
+		float avg_restart_k_plus_1 = ((1.0 - pow((1.0 - p_a_1),m))/ pow((1-p_a_1),m)); \
+		float w_m=0.0,u_m=0.0; \
+		if(conflict_active_threads[m]>0) \
+			w_m=((float)wasted_time_k[m]/(float)1000000)/(float)conflict_active_threads[m]; \
+		else if(tx_conflict_table_times>0)w_m=((float)total_tx_wasted_time/(float)1000000)/(float)tx_conflict_table_times; \
+		if(commit_active_threads[m]>0) \
+			u_m = ((float)useful_time_k[m]/(float)1000000)/(float)commit_active_threads[m]; \
+		else u_m = ((float)total_tx_time/(float)1000000)/(float)tx_committed_table; \
+		mu_k[m + 1]= 1.0/((w_m * avg_restart_k_plus_1) + u_m ); \
+		th_plus_1 = get_throughput(lambda,mu_k,m + 1); \
+		if(th_plus_1 > th) tx_cluster_table[0][1]++; \
+	} \
 };
 
-#define RESET_STATS() { \
+#define RESET_THREADS_STATS() { \
 		int t,s; \
 		for (t = 0; t < NUMBER_THREADS; t++) { \
-			for (s = 0; s < NUMBER_THREADS; s++) { \
+			for (s = 0; s < NUMBER_THREADS+1; s++) { \
 				statistics[t].total_wasted_time_per_active_transactions_per_tuning_cycle[s]=0; \
 				statistics[t].total_useful_time_per_active_transactions_per_tuning_cycle[s]=0; \
 				statistics[t].total_committed_txs_per_active_transactions_per_tuning_cycle[s]=0; \
@@ -183,8 +329,6 @@ unsigned long aborted_txs = 0; \
 
 #define TM_SIGNAL() { \
         thread_metadata_t* myStats = &(statistics[myThreadId]); \
-		printf("\nThread %i signaling, txs %i", myThreadId, myStats->commits_per_tuning_cycle); \
-		fflush(stdout); \
 		if (myStats->i_am_the_collector_thread==1){ \
 			fflush(stdout); \
 			myStats->start_no_tx_time=TM_TIMER_READ(); \
@@ -197,14 +341,18 @@ unsigned long aborted_txs = 0; \
             } \
 		    myStats->commits_per_tuning_cycle++; \
 			tm_time_t useful_time = myStats->start_no_tx_time - myStats->last_start_tx_time; \
-			myStats->total_wasted_time_per_active_transactions_per_tuning_cycle[active_txs]+=myStats->last_start_tx_time-myStats->first_start_tx_time; \
+			tm_time_t wasted_time = myStats->last_start_tx_time-myStats->first_start_tx_time; \
 			myStats->total_useful_time_per_active_transactions_per_tuning_cycle[active_txs]+=useful_time; \
+			myStats->total_wasted_time_per_active_transactions_per_tuning_cycle[active_txs]+=wasted_time; \
 			myStats->total_committed_txs_per_active_transactions_per_tuning_cycle[active_txs]++; \
 			myStats->total_useful_time_per_tuning_cycle+=useful_time; \
+			myStats->total_no_tx_time_per_tuning_cycle +=wasted_time; \
 			if(myStats->commits_per_tuning_cycle==TXS_PER_MCATS_TUNING_CYCLE){ \
 				if(myThreadId==NUMBER_THREADS - 1) { \
+					myStats->total_no_tx_time_per_tuning_cycle+=TM_TIMER_READ() - myStats->start_no_tx_time; \
 					TUNE_MCATS(); \
-					RESET_STATS(); \
+					RESET_THREADS_STATS(); \
+					myStats->start_no_tx_time=TM_TIMER_READ(); \
 					} \
 				current_collector_thread_id =(current_collector_thread_id + 1)% NUMBER_THREADS; \
 				myStats->i_am_the_collector_thread=0; \
@@ -237,8 +385,6 @@ unsigned long aborted_txs = 0; \
 				break; \
 			} \
     	} \
-		printf("\nThread %i exited, txs %i", myThreadId, myStats->commits_per_tuning_cycle); \
-		fflush(stdout); \
 	}
 
 
@@ -254,17 +400,12 @@ unsigned long aborted_txs = 0; \
             	    for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
                         __asm__ ( "pause;"); \
             	    } \
-            		if(myStats->i_am_the_collector_thread){ \
-            			unsigned int last_timer_value=TM_TIMER_READ(); \
-            			myStats->total_tx_wasted_per_active_transactions[tx_cluster_table[0][0]]+=last_timer_value - myStats->last_start_tx_time; \
-            			myStats->last_start_tx_time=last_timer_value; \
-            		} \
             	} \
             } \
             int status = _xbegin(); \
     		if(myStats->i_am_the_collector_thread && !myStats->first_tx_run){ \
     			unsigned int last_timer_value=TM_TIMER_READ(); \
-    			myStats->total_tx_wasted_per_active_transactions[tx_cluster_table[0][0]+1]+=last_timer_value - myStats->last_start_tx_time; \
+    			myStats->total_tx_wasted_per_active_transactions[tx_cluster_table[0][0]]+=last_timer_value - myStats->last_start_tx_time; \
     			myStats->last_start_tx_time=last_timer_value; \
     		} \
 			myStats->first_tx_run=0; \
@@ -276,16 +417,12 @@ unsigned long aborted_txs = 0; \
             tries--; \
             myStats->totalAborts++; \
             myStats->aborts_per_tuning_cycle++; \
+            myStats->total_aborted_txs_per_active_transactions_per_tuning_cycle[tx_cluster_table[0][0]]++; \
             if (tries <= 0) {   \
                 while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
                     for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
                         __asm__ ("pause;"); \
                     } \
-            		if(myStats->i_am_the_collector_thread){ \
-            			unsigned int last_timer_value=TM_TIMER_READ(); \
-            			myStats->total_tx_wasted_per_active_transactions[tx_cluster_table[0][0]]+=last_timer_value - myStats->last_start_tx_time; \
-            			myStats->last_start_tx_time=last_timer_value; \
-            		} \
                 } \
                 break; \
             } \
