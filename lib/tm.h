@@ -90,6 +90,8 @@ typedef unsigned long tm_time_t;
 })
 // MCATS code end
 
+tm_time_t last_tuning_time; \
+
 #  define TM_STARTUP(numThread, bId){ \
         benchmarkId = bId; \
         current_collector_thread_id=0; \
@@ -104,6 +106,7 @@ typedef unsigned long tm_time_t;
 			statistics[i].totalAborts = 0; \
 		} \
     	RESET_MCATS_STATS(); \
+    	last_tuning_time=TM_TIMER_READ(); \
         printf("BenchId = %d\tNumThread = %d\tAttBefGlLock = %d\tAPriLockAtt = %d ",benchmarkId, numThread, MAX_ATTEMPTS, APRIORI_ATTEMPTS); \
 }
 
@@ -294,8 +297,9 @@ typedef unsigned long tm_time_t;
 	m=tx_cluster_table[0][1]; \
 	GET_THROUGHPUT(); \
 	float th = predicted_throughput; \
-	printf("\n-----------------\nPredicted throughput %f\n-----------------",th); \
+	printf("\Predicted throughput %f\nMeasured throughput %f\n-----------------",th, (double)t_commit_active_threads/( (double)(last_tuning_time-TM_TIMER_READ()))); \
 	fflush(stdout); \
+	last_tuning_time=TM_TIMER_READ(); \
 };
 
 #define RESET_MCATS_STATS() { \
@@ -329,7 +333,6 @@ typedef unsigned long tm_time_t;
                 } \
 				active_txs=tx_cluster_table[0][0]; \
             } \
-		    myStats->commits_per_tuning_cycle++; \
 			tm_time_t useful_time = myStats->start_no_tx_time - myStats->last_start_tx_time; \
 			tm_time_t wasted_time = myStats->last_start_tx_time-myStats->first_start_tx_time; \
 			myStats->total_useful_time_per_active_transactions_per_tuning_cycle[active_txs]+=useful_time; \
@@ -393,7 +396,7 @@ typedef unsigned long tm_time_t;
             } \
             int status = _xbegin(); \
     		if(myStats->i_am_the_collector_thread && !myStats->first_tx_run){ \
-    			unsigned int last_timer_value=TM_TIMER_READ(); \
+    			tm_time_t last_timer_value=TM_TIMER_READ(); \
     			myStats->total_wasted_time_per_active_transactions_per_tuning_cycle[tx_cluster_table[0][0]]+=last_timer_value - myStats->last_start_tx_time; \
     			myStats->last_start_tx_time=last_timer_value; \
     		} \
