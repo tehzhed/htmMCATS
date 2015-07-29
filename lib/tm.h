@@ -1,3 +1,4 @@
+
 #ifndef TM_H
 #define TM_H 1
 
@@ -95,7 +96,7 @@ tm_time_t last_tuning_time; \
 #  define TM_STARTUP(numThread, bId){ \
         benchmarkId = bId; \
         current_collector_thread_id=0; \
-        tx_cluster_table[0][1]=1; \
+        tx_cluster_table[0][1]=NUMBER_THREADS; \
         MAX_ATTEMPTS = TOTAL_ATTEMPTS; \
         APRIORI_ATTEMPTS = APRIORI_LOCK_ATTEMPTS; \
         TXS_PER_MCATS_TUNING_CYCLE = TXS_PER_TUNING_CYCLE/NUMBER_THREADS; \
@@ -324,7 +325,7 @@ tm_time_t last_tuning_time; \
 #define TM_SIGNAL() { \
         thread_metadata_t* myStats = &(statistics[myThreadId]); \
 		if (myStats->i_am_the_collector_thread==1){ \
-			fflush(stdout); \
+			    myStats->commits_per_tuning_cycle++; \
 			myStats->start_no_tx_time=TM_TIMER_READ(); \
 			int active_txs=tx_cluster_table[0][0]; \
             while ((__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs-1) != active_txs)) { \
@@ -404,12 +405,14 @@ tm_time_t last_tuning_time; \
             if (status == _XBEGIN_STARTED) { break; } \
             if (tries == MAX_ATTEMPTS) { \
             	myStats->abortedTxs++; \
-                myStats->aborted_txs_per_tuning_cycle++; \
+                if(myStats->i_am_the_collector_thread) myStats->aborted_txs_per_tuning_cycle++; \
             } \
             tries--; \
             myStats->totalAborts++; \
-            myStats->aborts_per_tuning_cycle++; \
-            myStats->total_aborted_txs_per_active_transactions_per_tuning_cycle[tx_cluster_table[0][0]]++; \
+            if(myStats->i_am_the_collector_thread) { \
+		myStats->aborts_per_tuning_cycle++; \
+            	myStats->total_aborted_txs_per_active_transactions_per_tuning_cycle[tx_cluster_table[0][0]]++; \
+	    } \
             if (tries <= 0) {   \
                 while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
                     for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
@@ -449,7 +452,6 @@ tm_time_t last_tuning_time; \
         is_fallback = 0; \
     } \
     myStats->totalCommits++; \
-    myStats->commits_per_tuning_cycle++; \
     TM_SIGNAL(); \
 };
 
