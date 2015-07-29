@@ -75,6 +75,10 @@ __attribute__((aligned(64))) static volatile unsigned long tx_cluster_table[NUMB
 __attribute__((aligned(64))) unsigned long runs_limit;
 __attribute__((aligned(64))) unsigned long main_thread;
 __attribute__((aligned(64))) unsigned long current_collector_thread;
+__attribute__((aligned(64))) float lambda;
+__attribute__((aligned(64))) float *mu;
+__attribute__((aligned(64))) unsigned long m;
+__attribute__((aligned(64))) float predicted_throughput;
 
 typedef unsigned long tm_time_t;
 
@@ -99,7 +103,7 @@ typedef unsigned long tm_time_t;
 			statistics[i].abortedTxs = 0; \
 			statistics[i].totalAborts = 0; \
 		} \
-    	RESET_THREADS_STATS(); \
+    	RESET_MCATS_STATS(); \
         printf("BenchId = %d\tNumThread = %d\tAttBefGlLock = %d\tAPriLockAtt = %d ",benchmarkId, numThread, MAX_ATTEMPTS, APRIORI_ATTEMPTS); \
 }
 
@@ -123,15 +127,27 @@ typedef unsigned long tm_time_t;
 # define PRINT_STATS() { \
 	unsigned long total_aborts = 0;\
     unsigned long total_commits = 0; \
-unsigned long aborted_txs = 0; \
-        	int t; \
-        	for (t = 0; t < NUMBER_THREADS; t++) { \
-        		total_aborts += statistics[t].totalAborts; \
-                total_commits += statistics[t].totalCommits; \
-                aborted_txs += statistics[t].abortedTxs; \
-        	} \
+    unsigned long aborted_txs = 0; \
+    int t; \
+    for (t = 0; t < NUMBER_THREADS; t++) { \
+    	total_aborts += statistics[t].totalAborts; \
+    	total_commits += statistics[t].totalCommits; \
+    	aborted_txs += statistics[t].abortedTxs; \
+    } \
     printf("Commits = %ld\taborted = %ld\taborts = %ld ", total_commits, aborted_txs, total_aborts); \
 }
+
+
+# define PRINT_CLOCK_THROUGHPUT(CLOCKS) { \
+	unsigned long total_commits = 0; \
+	int t; \
+	for (t = 0; t < NUMBER_THREADS; t++) { \
+		total_commits += statistics[t].totalCommits; \
+	} \
+	printf("clock throghput = %f ", (float)(1000000 *total_commits)/(float)(CLOCKS)); \
+}
+
+
 # define IS_LOCKED(lock)        *((volatile int*)(&lock)) != 0
 
 # define TASK_LOCKS 0
@@ -180,43 +196,38 @@ unsigned long aborted_txs = 0; \
 	} \
 }
 
-float get_throughput(float lambda, float *mu, int m) {
-	float *c=(float*)malloc(sizeof(float)*NUMBER_THREADS+1);
-	float *p=(float*)malloc(sizeof(float)*NUMBER_THREADS+1);
-	float th=0;
-	int k;
-	//a_k
-	c[0]=1; //auxiliar
-	float a=0.0,b=0.0;
-	for (k=1;k<=NUMBER_THREADS;k++){
-			if(k<=m){
-				c[k]= c[k-1] * (lambda*((float)NUMBER_THREADS-k+1)/(k * mu[k]));
-				a+=c[k];
-			}else{
-				c[k]=c[k-1] * (lambda*((float)NUMBER_THREADS-k+1)/(m * mu[m]));
-				b+=c[k];
-			}
-	}
-	p[0]=1/(1+a+b);
-	for (k=1;k<=NUMBER_THREADS;k++){
-		p[k]=p[0]*c[k];
-	}
-
-	//th
-	for (k=1;k<=m;k++){
-		th+=p[k]*k*mu[k];
-	}
-	for (k=m+1;k<=NUMBER_THREADS;k++){
-		th+=p[k]*m*mu[m];
-	}
-	return th;
+#define GET_THROUGHPUT() { \
+	float *c=(float*)malloc(sizeof(float)*NUMBER_THREADS+1); \
+	float *p=(float*)malloc(sizeof(float)*NUMBER_THREADS+1); \
+	predicted_throughput=0; \
+	int k; \
+	c[0]=1; \
+	float a=0.0,b=0.0; \
+	for (k=1;k<=NUMBER_THREADS;k++){ \
+			if(k<=m){ \
+				c[k]= c[k-1] * (lambda*((float)NUMBER_THREADS-k+1)/(k * mu[k])); \
+				a+=c[k]; \
+			}else{ \
+				c[k]=c[k-1] * (lambda*((float)NUMBER_THREADS-k+1)/(m * mu[m])); \
+				b+=c[k]; \
+			} \
+	} \
+	p[0]=1/(1+a+b); \
+	for (k=1;k<=NUMBER_THREADS;k++){ \
+		p[k]=p[0]*c[k]; \
+	} \
+	for (k=1;k<=m;k++){ \
+		predicted_throughput+=p[k]*k*mu[k]; \
+	} \
+	for (k=m+1;k<=NUMBER_THREADS;k++){ \
+		predicted_throughput+=p[k]*m*mu[m]; \
+	} \
 }
 
 #define TUNE_MCATS() { \
 	printf("\nTuning ... Current_collector_thread_id %i", current_collector_thread_id); \
 	int t,s; \
 	fflush(stdout); \
-	int m=tx_cluster_table[0][1]; \
 	tm_time_t total_tx_wasted_time=0; \
 	tm_time_t total_tx_time=0; \
 	tm_time_t total_no_tx_time=0; \
@@ -270,45 +281,24 @@ float get_throughput(float lambda, float *mu, int m) {
 	printf("\ntotal_spin_time_per_tuning_cycle %llu",total_tx_spin_time); \
 	printf("\ncommits_per_tuning_cycle %llu %llu",tx_committed_table, t_commit_active_threads); \
 	printf("\naborted_txs_per_tuning_cycle %llu %llu",tx_conflict_table_times, t_conflict_active_threads); \
-	fflush(stdout); \
-	float *mu_k=(float*)malloc((NUMBER_THREADS+1) * sizeof(float)); \
-	float lambda = 1.0 / (((float) total_no_tx_time/(float)1000000)/(float) tx_committed_table); \
+	mu=(float*)malloc((NUMBER_THREADS+1) * sizeof(float)); \
+	lambda = 1.0 / (((float) total_no_tx_time/(float)1000000)/(float) tx_committed_table); \
+	int i; \
 	for (i=0;i<NUMBER_THREADS+1;i++){ \
 		if((wasted_time_k[i]>0 || useful_time_k[i]>0) && commit_active_threads[i] > 0){ \
-			mu_k[i]= 1.0 / ((((float) wasted_time_k[i] / (float)1000000) / (float)commit_active_threads[i]) + (((float) useful_time_k[i]/(float)1000000) / (float) commit_active_threads[i])); \
+			mu[i]= 1.0 / ((((float) wasted_time_k[i] / (float)1000000) / (float)commit_active_threads[i]) + (((float) useful_time_k[i]/(float)1000000) / (float) commit_active_threads[i])); \
 		}else{ \
-			mu_k[i]= 1.0 / ((((float)total_tx_wasted_time/(float)1000000)/(float)tx_committed_table)+(((float)total_tx_time/(float)1000000) / (float) tx_committed_table)); \
+			mu[i]= 1.0 / ((((float)total_tx_wasted_time/(float)1000000)/(float)tx_committed_table)+(((float)total_tx_time/(float)1000000) / (float) tx_committed_table)); \
 		} \
 	} \
-	float th = get_throughput(lambda,mu_k,m); \
-	float th_minus_1=0.0,th_plus_1=0.0,th_minus_2=0.0; \
-	if(m>3){ \
-		th_minus_1=get_throughput(lambda,mu_k,m-1); \
-		th_minus_2=get_throughput(lambda,mu_k,m-2); \
-	}else if(m>2)th_minus_1=get_throughput(lambda,mu_k,m-1); \
-	if(th_minus_2 >= th && th_minus_2 >= th_minus_1) { \
-		tx_cluster_table[0][1]-=2; \
-	}else if(th_minus_1>=th){ \
-		tx_cluster_table[0][1]--; \
-	}else if(m<NUMBER_THREADS){ \
-		float avg_restart_k= (float)conflict_active_threads[m]/(float)commit_active_threads[m]; \
-		float p_a_k = avg_restart_k /(1.0 + avg_restart_k); \
-		float p_a_1 = 1- pow(1-p_a_k,1.0/(double)(m-1)); \
-		float avg_restart_k_plus_1 = ((1.0 - pow((1.0 - p_a_1),m))/ pow((1-p_a_1),m)); \
-		float w_m=0.0,u_m=0.0; \
-		if(conflict_active_threads[m]>0) \
-			w_m=((float)wasted_time_k[m]/(float)1000000)/(float)conflict_active_threads[m]; \
-		else if(tx_conflict_table_times>0)w_m=((float)total_tx_wasted_time/(float)1000000)/(float)tx_conflict_table_times; \
-		if(commit_active_threads[m]>0) \
-			u_m = ((float)useful_time_k[m]/(float)1000000)/(float)commit_active_threads[m]; \
-		else u_m = ((float)total_tx_time/(float)1000000)/(float)tx_committed_table; \
-		mu_k[m + 1]= 1.0/((w_m * avg_restart_k_plus_1) + u_m ); \
-		th_plus_1 = get_throughput(lambda,mu_k,m + 1); \
-		if(th_plus_1 > th) tx_cluster_table[0][1]++; \
-	} \
+	m=tx_cluster_table[0][1]; \
+	GET_THROUGHPUT(); \
+	float th = predicted_throughput; \
+	printf("\n-----------------\nPredicted throughput %f\n-----------------",th); \
+	fflush(stdout); \
 };
 
-#define RESET_THREADS_STATS() { \
+#define RESET_MCATS_STATS() { \
 		int t,s; \
 		for (t = 0; t < NUMBER_THREADS; t++) { \
 			for (s = 0; s < NUMBER_THREADS+1; s++) { \
@@ -351,7 +341,7 @@ float get_throughput(float lambda, float *mu, int m) {
 				if(myThreadId==NUMBER_THREADS - 1) { \
 					myStats->total_no_tx_time_per_tuning_cycle+=TM_TIMER_READ() - myStats->start_no_tx_time; \
 					TUNE_MCATS(); \
-					RESET_THREADS_STATS(); \
+					RESET_MCATS_STATS(); \
 					myStats->start_no_tx_time=TM_TIMER_READ(); \
 					} \
 				current_collector_thread_id =(current_collector_thread_id + 1)% NUMBER_THREADS; \

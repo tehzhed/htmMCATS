@@ -328,14 +328,17 @@ for (; repeats > 0; --repeats) {
 
     TIMER_T startTime;
     TIMER_READ(startTime);
+    tm_time_t start_clock=TM_TIMER_READ();
     GOTO_SIM();
     thread_start(processPackets, (void*)&arg);
     GOTO_REAL();
     TIMER_T stopTime;
+    tm_time_t end_clock=TM_TIMER_READ();
     TIMER_READ(stopTime);
-double time_tmp = TIMER_DIFF_SECONDS(startTime, stopTime);
-time_total += time_tmp;
+    double time_tmp = TIMER_DIFF_SECONDS(startTime, stopTime);
+	time_total += time_tmp;
     PRINT_STATS();
+    PRINT_CLOCK_THROUGHPUT(end_clock-start_clock);
 
     /*
      * Check solution
