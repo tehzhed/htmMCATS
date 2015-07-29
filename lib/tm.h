@@ -333,10 +333,9 @@ typedef unsigned long tm_time_t;
 			tm_time_t useful_time = myStats->start_no_tx_time - myStats->last_start_tx_time; \
 			tm_time_t wasted_time = myStats->last_start_tx_time-myStats->first_start_tx_time; \
 			myStats->total_useful_time_per_active_transactions_per_tuning_cycle[active_txs]+=useful_time; \
-			myStats->total_wasted_time_per_active_transactions_per_tuning_cycle[active_txs]+=wasted_time; \
 			myStats->total_committed_txs_per_active_transactions_per_tuning_cycle[active_txs]++; \
 			myStats->total_useful_time_per_tuning_cycle+=useful_time; \
-			myStats->total_no_tx_time_per_tuning_cycle +=wasted_time; \
+			myStats->total_wasted_time_per_tuning_cycle +=wasted_time; \
 			if(myStats->commits_per_tuning_cycle==TXS_PER_MCATS_TUNING_CYCLE){ \
 				if(myThreadId==NUMBER_THREADS - 1) { \
 					myStats->total_no_tx_time_per_tuning_cycle+=TM_TIMER_READ() - myStats->start_no_tx_time; \
@@ -393,6 +392,12 @@ typedef unsigned long tm_time_t;
             	} \
             } \
             int status = _xbegin(); \
+    		if(myStats->i_am_the_collector_thread && !myStats->first_tx_run){ \
+    			unsigned int last_timer_value=TM_TIMER_READ(); \
+    			myStats->total_wasted_time_per_active_transactions_per_tuning_cycle[tx_cluster_table[0][0]]+=last_timer_value - myStats->last_start_tx_time; \
+    			myStats->last_start_tx_time=last_timer_value; \
+    		} \
+			myStats->first_tx_run=0; \
             if (status == _XBEGIN_STARTED) { break; } \
             if (tries == MAX_ATTEMPTS) { \
             	myStats->abortedTxs++; \
@@ -483,13 +488,3 @@ typedef unsigned long tm_time_t;
 #  define TM_LOCAL_WRITE_F(var, val)    ({var = val; var;})
 
 #endif
-
-/*
- *     		if(myStats->i_am_the_collector_thread && !myStats->first_tx_run){ \
-    			unsigned int last_timer_value=TM_TIMER_READ(); \
-    			myStats->total_tx_wasted_per_active_transactions[tx_cluster_table[0][0]]+=last_timer_value - myStats->last_start_tx_time; \
-    			myStats->last_start_tx_time=last_timer_value; \
-    		} \
-			myStats->first_tx_run=0; \
-			*/
-
