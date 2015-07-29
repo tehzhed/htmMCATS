@@ -378,7 +378,7 @@ typedef unsigned long tm_time_t;
 	}
 
 
-# define TM_BEGIN_(b) { \
+# define TM_BEGIN(b) { \
         thread_metadata_t* myStats = &(statistics[myThreadId]); \
         int cycles = 0; \
         int tries = MAX_ATTEMPTS; \
@@ -418,7 +418,7 @@ typedef unsigned long tm_time_t;
             } \
         }
 
-# define TM_BEGIN(b) { \
+# define TM_BEGIN(b)_ { \
         thread_metadata_t* myStats = &statistics; \
         int cycles = 0; \
         int tries = MAX_ATTEMPTS; \
@@ -439,7 +439,7 @@ typedef unsigned long tm_time_t;
         }
 
 
-# define TM_END_() \
+# define TM_END() \
 	if (tries > 0) { \
         if (IS_LOCKED(is_fallback)) { _xabort(30); } \
 		_xend(); \
@@ -452,7 +452,7 @@ typedef unsigned long tm_time_t;
 };
 
 
-# define TM_END() \
+# define TM_END()_ \
     is_fallback = 0; \
     myStats->totalCommits++; \
     TM_SIGNAL(); \
