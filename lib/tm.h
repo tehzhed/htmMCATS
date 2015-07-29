@@ -393,12 +393,6 @@ typedef unsigned long tm_time_t;
             	} \
             } \
             int status = _xbegin(); \
-    		if(myStats->i_am_the_collector_thread && !myStats->first_tx_run){ \
-    			unsigned int last_timer_value=TM_TIMER_READ(); \
-    			myStats->total_tx_wasted_per_active_transactions[tx_cluster_table[0][0]]+=last_timer_value - myStats->last_start_tx_time; \
-    			myStats->last_start_tx_time=last_timer_value; \
-    		} \
-			myStats->first_tx_run=0; \
             if (status == _XBEGIN_STARTED) { break; } \
             if (tries == MAX_ATTEMPTS) { \
             	myStats->abortedTxs++; \
@@ -418,7 +412,7 @@ typedef unsigned long tm_time_t;
             } \
         }
 
-# define TM_BEGIN(b)_ { \
+# define TM_BEGIN_(b) { \
         thread_metadata_t* myStats = &statistics; \
         int cycles = 0; \
         int tries = MAX_ATTEMPTS; \
@@ -447,12 +441,12 @@ typedef unsigned long tm_time_t;
         is_fallback = 0; \
     } \
     myStats->totalCommits++; \
-    myStats->commits_per_tuning_cycle; \\
+    myStats->commits_per_tuning_cycle; \
     TM_SIGNAL(); \
 };
 
 
-# define TM_END()_ \
+# define TM_END_() \
     is_fallback = 0; \
     myStats->totalCommits++; \
     TM_SIGNAL(); \
@@ -489,3 +483,13 @@ typedef unsigned long tm_time_t;
 #  define TM_LOCAL_WRITE_F(var, val)    ({var = val; var;})
 
 #endif
+
+/*
+ *     		if(myStats->i_am_the_collector_thread && !myStats->first_tx_run){ \
+    			unsigned int last_timer_value=TM_TIMER_READ(); \
+    			myStats->total_tx_wasted_per_active_transactions[tx_cluster_table[0][0]]+=last_timer_value - myStats->last_start_tx_time; \
+    			myStats->last_start_tx_time=last_timer_value; \
+    		} \
+			myStats->first_tx_run=0; \
+			*/
+
