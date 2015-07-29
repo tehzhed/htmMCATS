@@ -296,8 +296,9 @@ tm_time_t last_tuning_time; \
 	} \
 	m=tx_cluster_table[0][1]; \
 	GET_THROUGHPUT(); \
-	float th = predicted_throughput; \
-	printf("\Predicted throughput %f\nMeasured throughput %f\n-----------------",th, (double)t_commit_active_threads/( (double)(last_tuning_time-TM_TIMER_READ()))); \
+	printf("\nTime %f", (double)(last_tuning_time-TM_TIMER_READ())); \
+	double measured_th =(double)t_commit_active_threads/((double)(last_tuning_time-TM_TIMER_READ())); \
+	printf("\nPredicted throughput %f\nMeasured throughput %f\n-----------------",predicted_throghput, measured_th); \
 	fflush(stdout); \
 	last_tuning_time=TM_TIMER_READ(); \
 };
@@ -449,7 +450,7 @@ tm_time_t last_tuning_time; \
         is_fallback = 0; \
     } \
     myStats->totalCommits++; \
-    myStats->commits_per_tuning_cycle; \
+    myStats->commits_per_tuning_cycle++; \
     TM_SIGNAL(); \
 };
 
