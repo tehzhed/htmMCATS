@@ -296,9 +296,7 @@ tm_time_t last_tuning_time; \
 	} \
 	m=tx_cluster_table[0][1]; \
 	GET_THROUGHPUT(); \
-	tm_time_t last_timer_value=TM_TIMER_READ(); \
-	printf("\nTime %f,%f,%f", (double)(last_tuning_time-last_timer_value), last_timer_value, last_tuning_time) ; \
-	double measured_th =(double)t_commit_active_threads/((double)(last_tuning_time-TM_TIMER_READ())); \
+	double measured_th =NUMBER_THREADS*(double)t_commit_active_threads*1000000/((double)(TM_TIMER_READ()-last_tuning_time)); \
 	printf("\nPredicted throughput %f\nMeasured throughput %f\n-----------------",predicted_throughput, measured_th); \
 	fflush(stdout); \
 	last_tuning_time=TM_TIMER_READ(); \
