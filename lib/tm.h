@@ -276,7 +276,7 @@ tm_time_t last_tuning_time; \
 		t_total_aborted_runs_per_state+=total_aborted_runs_per_state[s]; \
 	} \
 	printf("\n-------------"); \
-	printf("\ntotal_run_execution_time_per_cycle %llu %llu",total_run_execution_time); \
+	printf("\ntotal_run_execution_time_per_cycle %llu",total_run_execution_time); \
 	printf("\ntotal_no_tx_time_per_cycle %llu",total_no_tx_time); \
 	printf("\ntotal_spin_time_per_cycle %llu",total_tx_spin_time); \
 	printf("\ncommits_per_cycle %llu %llu",total_committed_runs, t_total_committed_runs_per_state); \
