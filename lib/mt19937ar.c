@@ -116,7 +116,7 @@
 
 
 #include "mt19937ar.h"
-
+#define M 397
 
 /* initializes mt[N] with a seed */
 void init_genrand(unsigned long mt[], unsigned long * mtiPtr, unsigned long s)
