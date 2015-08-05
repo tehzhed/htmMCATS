@@ -233,7 +233,7 @@ tm_time_t last_tuning_time; \
 		int s; \
 		gsl_linalg_LU_decomp(Q, p, &s); \
 		gsl_linalg_LU_solve(Q, p, b, x); \
-		printf ("\nx:\n"); \
+		printf ("x:\n"); \
 		for (i = 0; i <= 2*NUMBER_THREADS-1; i++) { \
 		    	printf ("%.2f\t",gsl_vector_get (x, i)); \
 		} \
