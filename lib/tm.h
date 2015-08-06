@@ -421,15 +421,16 @@ tm_time_t last_tuning_time; \
     		} \
 			myStats->first_tx_run=0; \
             if (status == _XBEGIN_STARTED) { break; } \
+			int active_txs=tx_cluster_table[0][0]; \
             tries--; \
             myStats->totalAborts++; \
             if(myStats->i_am_the_collector_thread) { \
             	myStats->aborts_per_cycle++; \
-            	myStats->total_aborted_runs_per_state_per_cycle[tx_cluster_table[0][0]]++; \
+            	myStats->total_aborted_runs_per_state_per_cycle[active_txs]++; \
             } \
             if (tries <= 0) {   \
                 if(myStats->i_am_the_collector_thread) { \
-                	myStats->total_acquired_locks_per_state_per_cycle[tx_cluster_table[0][0]]++; \
+                	myStats->total_acquired_locks_per_state_per_cycle[active_txs]++; \
                 	myStats->acquired_locks_per_cycle++; \
                 } \
                 while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
