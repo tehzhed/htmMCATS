@@ -290,7 +290,7 @@ tm_time_t last_tuning_time; \
 	printf("\ntotal_spin_time_per_cycle %llu",total_tx_spin_time); \
 	printf("\ncommits_per_cycle %llu %llu",total_committed_runs, t_total_committed_runs_per_state); \
 	printf("\naborted_txs_per_cycle %llu %llu",total_aborted_runs, t_total_aborted_runs_per_state); \
-	printf("\nacquired_locks_per_naborted_txs_per_cycle %llu %llu",total_acquired_locks_per_state, t_total_acquired_locks_per_state); \
+	printf("\nacquired_locks_per_aborted_txs_per_cycle %llu %llu",total_acquired_locks, t_total_acquired_locks_per_state); \
 	lambda = 1.0 / (((float) total_no_tx_time/(float)1000000)/(float) total_committed_runs); \
 	mu= 1.0 / ((((float) total_run_execution_time / (float)1000000) / (float)(total_committed_runs+total_aborted_runs))); \
 	m=tx_cluster_table[0][1]; \
