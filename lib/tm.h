@@ -509,3 +509,11 @@ tm_time_t last_tuning_time; \
 #  define TM_SHARED_WRITE_I(var, val)   ({var = val; var;})
 #  define TM_SHARED_WRITE_L(var, val)   ({var = val; var;})
 #  define TM_SHARED_WRITE_P(var, val)   ({var = val; var;})
+#  define TM_SHARED_WRITE_F(var, val)   ({var = val; var;})
+
+#  define TM_LOCAL_WRITE_I(var, val)    ({var = val; var;})
+#  define TM_LOCAL_WRITE_L(var, val)    ({var = val; var;})
+#  define TM_LOCAL_WRITE_P(var, val)    ({var = val; var;})
+#  define TM_LOCAL_WRITE_F(var, val)    ({var = val; var;})
+
+#endif
