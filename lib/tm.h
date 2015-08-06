@@ -416,14 +416,8 @@ tm_time_t last_tuning_time; \
             	    } \
             	} \
             } \
-	        myStats->restarting=0 \
+    		if(myStats->i_am_the_collector_thread) myStats->start_tx_time=TM_TIMER_READ(); \
             int status = _xbegin(); \
-    		if(myStats->i_am_the_collector_thread) { \
-				if(!myStats->restarting){ \
-					myStats->start_tx_time=TM_TIMER_READ(); \
-					myStats->restarting=1; \
-				} \
-    		} \
             if (status == _XBEGIN_STARTED) { break; } \
 			int active_txs=tx_cluster_table[0][0]; \
             tries--; \
@@ -431,8 +425,8 @@ tm_time_t last_tuning_time; \
             if(myStats->i_am_the_collector_thread) { \
             	myStats->aborts_per_cycle++; \
             	myStats->total_aborted_runs_per_state_per_cycle[active_txs]++; \
+    			myStats->total_run_execution_time_per_state_per_cycle[active_txs]+=TM_TIMER_READ() - myStats->start_tx_time; \
             } \
-			myStats->total_run_execution_time_per_state_per_cycle[active_txs]+=TM_TIMER_READ() - myStats->start_tx_time; \
             if (tries <= 0) {   \
                 if(myStats->i_am_the_collector_thread) { \
                 	myStats->total_acquired_locks_per_state_per_cycle[active_txs]++; \
@@ -443,6 +437,7 @@ tm_time_t last_tuning_time; \
                         __asm__ ("pause;"); \
                     } \
                 } \
+				if(myStats->i_am_the_collector_thread) myStats->start_tx_time=TM_TIMER_READ(); \
                 break; \
             } \
         }
