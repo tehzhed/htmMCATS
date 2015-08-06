@@ -239,6 +239,11 @@ tm_time_t last_tuning_time; \
 		for (i = 0; i <= 2*NUMBER_THREADS-1; i++) { \
 		    	printf ("%.2f\t",gsl_vector_get (x, i)); \
 		} \
+		predicted_throughput=0; \
+		for (i = 1; i <= N; i++) \
+			predicted_throughput+=gsl_matrix_get(Q,i-1, i)*gsl_vector_get(x,i); \
+		for (i = NUMBER_THREADS+1; i<= 2*NUMBER_THREADS-1; i++) \
+			predicted_throughput+=gsl_matrix_get(Q,i-NUMBER_THREADS, i)*gsl_vector_get(x,i); \
 		gsl_permutation_free(p); \
 		gsl_vector_free(x); \
 }
