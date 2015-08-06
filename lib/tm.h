@@ -47,7 +47,7 @@ typedef struct thread_metadata {
     long totalCommits;
     long i_am_the_collector_thread;
     long i_am_waiting;
-    long first_tx_run;
+    long restarting;
     char suffixPadding[64];
     unsigned long updateStatsCounter;
     // MCATS code start
@@ -240,8 +240,8 @@ tm_time_t last_tuning_time; \
 		    	printf ("%.2f\t",gsl_vector_get (x, i)); \
 		} \
 		predicted_throughput=0; \
-		for (i = 1; i <= N; i++) \
-			predicted_throughput+=gsl_matrix_get(Q,i-1, i)*gsl_vector_get(x,i); \
+		for (i = 1; i <= NUMBER_THREADS; i++) \
+			predicted_throughput+=(Q,i-1, i)*gsl_vector_get(x,i); \
 		for (i = NUMBER_THREADS+1; i<= 2*NUMBER_THREADS-1; i++) \
 			predicted_throughput+=gsl_matrix_get(Q,i-NUMBER_THREADS, i)*gsl_vector_get(x,i); \
 		gsl_permutation_free(p); \
@@ -341,7 +341,6 @@ tm_time_t last_tuning_time; \
 	} \
 	if (myStats->i_am_the_collector_thread==1){ \
 		if (entered==0) { \
-			myStats->start_tx_time=TM_TIMER_READ(); \
 			myStats->total_spin_time_per_cycle+=myStats->start_tx_time-start_spin_time; \
 		} \
 	} \
@@ -409,7 +408,6 @@ tm_time_t last_tuning_time; \
         int cycles = 0; \
         int tries = MAX_ATTEMPTS; \
         TM_WAIT(); \
-        myStats->first_tx_run=1; \
         while (1) { \
             if (IS_LOCKED(is_fallback)) { \
             	while (IS_LOCKED(is_fallback)) { \
@@ -418,13 +416,14 @@ tm_time_t last_tuning_time; \
             	    } \
             	} \
             } \
+	        myStats->restarting=0 \
             int status = _xbegin(); \
-    		if(myStats->i_am_the_collector_thread && !myStats->first_tx_run){ \
-    			tm_time_t last_timer_value=TM_TIMER_READ(); \
-    			myStats->total_run_execution_time_per_state_per_cycle[tx_cluster_table[0][0]]+=last_timer_value - myStats->start_tx_time; \
-    			myStats->start_tx_time=last_timer_value; \
+    		if(myStats->i_am_the_collector_thread) { \
+				if(!myStats->restarting){ \
+					myStats->start_tx_time=TM_TIMER_READ(); \
+					myStats->restarting=1; \
+				} \
     		} \
-			myStats->first_tx_run=0; \
             if (status == _XBEGIN_STARTED) { break; } \
 			int active_txs=tx_cluster_table[0][0]; \
             tries--; \
@@ -433,6 +432,7 @@ tm_time_t last_tuning_time; \
             	myStats->aborts_per_cycle++; \
             	myStats->total_aborted_runs_per_state_per_cycle[active_txs]++; \
             } \
+			myStats->total_run_execution_time_per_state_per_cycle[active_txs]+=TM_TIMER_READ() - myStats->start_tx_time; \
             if (tries <= 0) {   \
                 if(myStats->i_am_the_collector_thread) { \
                 	myStats->total_acquired_locks_per_state_per_cycle[active_txs]++; \
