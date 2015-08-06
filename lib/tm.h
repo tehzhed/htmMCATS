@@ -425,7 +425,6 @@ tm_time_t last_tuning_time; \
             myStats->totalAborts++; \
             if(myStats->i_am_the_collector_thread) { \
             	myStats->aborts_per_cycle++; \
-            	myStats->acquired_locks_per_cycle++; \
             	myStats->total_aborted_runs_per_state_per_cycle[tx_cluster_table[0][0]]++; \
             } \
             if (tries <= 0) {   \
