@@ -55,6 +55,7 @@ typedef struct thread_metadata {
     unsigned long total_run_execution_time_per_state_per_cycle[NUMBER_THREADS+1];
     unsigned long total_committed_runs_per_state_per_cycle[NUMBER_THREADS+1];
     unsigned long total_aborted_runs_per_state_per_cycle[NUMBER_THREADS+1];
+    unsigned long total_acquired_locks_per_state_per_cycle[NUMBER_THREADS+1];
     unsigned long total_run_execution_time_per_cycle;
     unsigned long total_no_tx_time_per_cycle;
     unsigned long total_spin_time_per_cycle;
@@ -62,8 +63,8 @@ typedef struct thread_metadata {
     unsigned long start_no_tx_time;
     unsigned long wait_cycles;
     unsigned long commits_per_cycle;
-    unsigned long aborted_txs_per_cycle;
 	unsigned long aborts_per_cycle;
+	unsigned long acquired_locks_per_cycle;
     // MCATS code end
 
 } __attribute__((aligned(64))) thread_metadata_t;
@@ -166,13 +167,14 @@ tm_time_t last_tuning_time; \
 				statistics[t].total_run_execution_time_per_state_per_cycle[s]=0; \
 				statistics[t].total_committed_runs_per_state_per_cycle[s]=0; \
 				statistics[t].total_aborted_runs_per_state_per_cycle[s]=0; \
+				statistics[t].total_acquired_locks_per_state_per_cycle[s]=0; \
 			} \
 			statistics[t].total_run_execution_time_per_cycle=0; \
 			statistics[t].total_no_tx_time_per_cycle=0; \
 			statistics[t].total_spin_time_per_cycle=0; \
 			statistics[t].commits_per_cycle=0; \
-			statistics[t].aborted_txs_per_cycle=0; \
 			statistics[t].aborts_per_cycle=0; \
+			statistics[t].acquired_locks_per_cycle=0; \
 		} \
 	}
 
@@ -250,15 +252,18 @@ tm_time_t last_tuning_time; \
 	tm_time_t total_tx_spin_time=0; \
 	long total_committed_runs=0; \
 	long total_aborted_runs=0; \
+	long total_acquired_locks=0; \
 	float avg_running_tx=0; \
 	memset(total_aborted_runs_per_state, 0, (NUMBER_THREADS+1) * sizeof(long)); \
 	memset(total_committed_runs_per_state, 0, (NUMBER_THREADS+1) * sizeof(long)); \
+	memset(total_acquired_locks_per_state, 0, (NUMBER_THREADS+1) * sizeof(long)); \
 	for (t = 0; t < NUMBER_THREADS; t++) { \
 		total_run_execution_time+=statistics[t].total_run_execution_time_per_cycle; \
 		total_no_tx_time+=statistics[t].total_no_tx_time_per_cycle; \
 		total_tx_spin_time+=statistics[t].total_spin_time_per_cycle; \
 		total_committed_runs+=statistics[t].commits_per_cycle; \
 		total_aborted_runs+=statistics[t].aborts_per_cycle; \
+		total_acquired_locks+=statistics[t].acquired_locks_per_cycle; \
 		int s; \
 		printf("\nThread %i", t); \
 		for (s = 0; s < NUMBER_THREADS+1; s++) { \
@@ -266,14 +271,18 @@ tm_time_t last_tuning_time; \
 			printf("\tc %llu", statistics[t].total_committed_runs_per_state_per_cycle[s]); \
 			total_aborted_runs_per_state[s]+=statistics[t].total_aborted_runs_per_state_per_cycle[s]; \
 			printf("\ta %llu", statistics[t].total_aborted_runs_per_state_per_cycle[s]); \
+			total_acquired_locks_per_state[s]+=statistics[t].total_acquired_locks_per_state_per_cycle[s]; \
+			printf("\tl %llu", statistics[t].total_acquired_locks_per_state_per_cycle[s]); \
 			printf(" |"); \
 		} \
 	} \
 	long t_total_committed_runs_per_state=0; \
 	long t_total_aborted_runs_per_state=0; \
+	long t_total_acquired_locks_per_state=0; \
 	for (s = 0; s < NUMBER_THREADS+1; s++) { \
 		t_total_committed_runs_per_state+=total_committed_runs_per_state[s]; \
 		t_total_aborted_runs_per_state+=total_aborted_runs_per_state[s]; \
+		t_total_acquired_locks_per_state+=total_acquired_locks_per_state[s]; \
 	} \
 	printf("\n-------------"); \
 	printf("\ntotal_run_execution_time_per_cycle %llu",total_run_execution_time); \
@@ -281,6 +290,7 @@ tm_time_t last_tuning_time; \
 	printf("\ntotal_spin_time_per_cycle %llu",total_tx_spin_time); \
 	printf("\ncommits_per_cycle %llu %llu",total_committed_runs, t_total_committed_runs_per_state); \
 	printf("\naborted_txs_per_cycle %llu %llu",total_aborted_runs, t_total_aborted_runs_per_state); \
+	printf("\nacquired_locks_per_naborted_txs_per_cycle %llu %llu",total_acquired_locks_per_state, t_total_acquired_locks_per_state); \
 	lambda = 1.0 / (((float) total_no_tx_time/(float)1000000)/(float) total_committed_runs); \
 	mu= 1.0 / ((((float) total_run_execution_time / (float)1000000) / (float)(total_committed_runs+total_aborted_runs))); \
 	m=tx_cluster_table[0][1]; \
@@ -411,17 +421,18 @@ tm_time_t last_tuning_time; \
     		} \
 			myStats->first_tx_run=0; \
             if (status == _XBEGIN_STARTED) { break; } \
-            if (tries == MAX_ATTEMPTS) { \
-            	myStats->abortedTxs++; \
-                if(myStats->i_am_the_collector_thread) myStats->aborted_txs_per_cycle++; \
-            } \
             tries--; \
             myStats->totalAborts++; \
             if(myStats->i_am_the_collector_thread) { \
             	myStats->aborts_per_cycle++; \
+            	myStats->acquired_locks_per_cycle++; \
             	myStats->total_aborted_runs_per_state_per_cycle[tx_cluster_table[0][0]]++; \
             } \
             if (tries <= 0) {   \
+                if(myStats->i_am_the_collector_thread) { \
+                	myStats->total_acquired_locks_per_state_per_cycle[tx_cluster_table[0][0]]++; \
+                	myStats->acquired_locks_per_cycle++; \
+                } \
                 while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
                     for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
                         __asm__ ("pause;"); \
