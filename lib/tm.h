@@ -297,7 +297,9 @@ tm_time_t last_tuning_time; \
 	printf("\naborted_txs_per_cycle %llu %llu",total_aborted_runs, t_total_aborted_runs_per_state); \
 	printf("\nacquired_locks_per_aborted_txs_per_cycle %llu %llu",total_acquired_locks, t_total_acquired_locks_per_state); \
 	lambda = 1.0 / (((float) total_no_tx_time/(float)1000000)/(float) total_committed_runs); \
+	printf("\nlambda %f",lambda); \
 	mu= 1.0 / ((((float) total_run_execution_time / (float)1000000) / (float)(total_committed_runs+total_aborted_runs))); \
+	printf("\nmu %f",mu); \
 	m=tx_cluster_table[0][1]; \
 	GET_THROUGHPUT(); \
 	double measured_th =NUMBER_THREADS*(double)t_total_committed_runs_per_state*1000000/((double)(TM_TIMER_READ()-last_tuning_time)); \
