@@ -71,7 +71,7 @@ typedef struct thread_metadata {
 
 __attribute__((aligned(64))) thread_metadata_t statistics[NUMBER_THREADS];
 __attribute__((aligned(64))) static volatile unsigned long tx_cluster_table[NUMBER_ATOMIC_BLOCKS][2];
-__attribute__((aligned(64))) unsigned long runs_limit;
+__attribute__((aligned(64))) unsigned long committed_tx_per_tuning_cycle;
 __attribute__((aligned(64))) unsigned long main_thread;
 __attribute__((aligned(64))) unsigned long current_collector_thread;
 __attribute__((aligned(64))) float lambda;
@@ -349,59 +349,59 @@ tm_time_t last_tuning_time; \
 
 #define TM_SIGNAL() { \
         thread_metadata_t* myStats = &(statistics[myThreadId]); \
-                if (myStats->i_am_the_collector_thread==1){ \
-                            myStats->commits_per_cycle++; \
-                        myStats->start_no_tx_time=TM_TIMER_READ(); \
-                        int active_txs=tx_cluster_table[0][0]; \
-            while ((__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs-1) != active_txs)) { \
-                for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
-                    __asm__ ("pause;"); \
-                } \
-                                active_txs=tx_cluster_table[0][0]; \
-            } \
-                        tm_time_t run_execution_time = myStats->start_no_tx_time - myStats->start_tx_time; \
-                        myStats->total_run_execution_time_per_state_per_cycle[active_txs]+=run_execution_time; \
-                        myStats->total_committed_runs_per_state_per_cycle[active_txs]++; \
-                        myStats->total_run_execution_time_per_cycle+=run_execution_time; \
-                        if(myStats->commits_per_cycle==TXS_PER_MCATS_TUNING_CYCLE){ \
-                                if(myThreadId==NUMBER_THREADS - 1) { \
-                                        myStats->total_no_tx_time_per_cycle+=TM_TIMER_READ() - myStats->start_no_tx_time; \
-                                        TUNE_MCATS(); \
-                                        RESET_MCATS_STATS(); \
-                                        myStats->start_no_tx_time=TM_TIMER_READ(); \
-                                        } \
-                                current_collector_thread_id =(current_collector_thread_id + 1)% NUMBER_THREADS; \
-                                myStats->i_am_the_collector_thread=0; \
-                        } \
-                }else if(current_collector_thread_id==myThreadId){ \
-                        fflush(stdout); \
-                        myStats->start_no_tx_time=TM_TIMER_READ(); \
-                        int active_txs=tx_cluster_table[0][0]; \
-            while ((__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs-1) != active_txs)) { \
-                for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
-                    __asm__ ("pause;"); \
-                } \
-                                active_txs=tx_cluster_table[0][0]; \
-            } \
-                        myStats->i_am_the_collector_thread=1; \
-                } else { \
-                        fflush(stdout); \
-                        int active_txs=tx_cluster_table[0][0]; \
-            while ((__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs-1) != active_txs)) { \
-                for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
-                    __asm__ ("pause;"); \
-                } \
-                                active_txs=tx_cluster_table[0][0]; \
-            } \
-                } \
-                int t; \
-        for (t = 0; t < NUMBER_THREADS; t++) { \
-                        if(statistics[t].i_am_waiting==1){ \
-                                statistics[t].i_am_waiting=0; \
-                                break; \
-                        } \
+        if (myStats->i_am_the_collector_thread==1){ \
+        	myStats->commits_per_cycle++; \
+        	myStats->start_no_tx_time=TM_TIMER_READ(); \
+        	int active_txs=tx_cluster_table[0][0]; \
+        	while ((__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs-1) != active_txs)) { \
+        		for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
+        			__asm__ ("pause;"); \
+        		} \
+				active_txs=tx_cluster_table[0][0]; \
+        	} \
+			tm_time_t run_execution_time = myStats->start_no_tx_time - myStats->start_tx_time; \
+			myStats->total_run_execution_time_per_state_per_cycle[active_txs]+=run_execution_time; \
+			myStats->total_committed_runs_per_state_per_cycle[active_txs]++; \
+			myStats->total_run_execution_time_per_cycle+=run_execution_time; \
+			if(myStats->commits_per_cycle==TXS_PER_MCATS_TUNING_CYCLE){ \
+				if(myThreadId==NUMBER_THREADS - 1) { \
+					myStats->total_no_tx_time_per_cycle+=TM_TIMER_READ() - myStats->start_no_tx_time; \
+					TUNE_MCATS(); \
+					RESET_MCATS_STATS(); \
+					myStats->start_no_tx_time=TM_TIMER_READ(); \
+				} \
+				current_collector_thread_id =(current_collector_thread_id + 1)% NUMBER_THREADS; \
+				myStats->i_am_the_collector_thread=0; \
+			} \
+        }else if(current_collector_thread_id==myThreadId){ \
+        	fflush(stdout); \
+        	myStats->start_no_tx_time=TM_TIMER_READ(); \
+        	int active_txs=tx_cluster_table[0][0]; \
+        	while ((__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs-1) != active_txs)) { \
+        		for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
+        			__asm__ ("pause;"); \
+        		} \
+				active_txs=tx_cluster_table[0][0]; \
+        	} \
+			myStats->i_am_the_collector_thread=1; \
+        } else { \
+        	fflush(stdout); \
+        	int active_txs=tx_cluster_table[0][0]; \
+        	while ((__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs-1) != active_txs)) { \
+        		for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
+        			__asm__ ("pause;"); \
+        		} \
+				active_txs=tx_cluster_table[0][0]; \
+        	} \
         } \
-	}
+		int t; \
+		for (t = 0; t < NUMBER_THREADS; t++) { \
+			if(statistics[t].i_am_waiting==1){ \
+				statistics[t].i_am_waiting=0; \
+				break; \
+			} \
+		} \
+}
 
 
 # define TM_BEGIN(b) { \
