@@ -1,6 +1,6 @@
 #!/bin/sh
 
-workspace="/media/data/Documents/univ/MCATS/eclipse_workspace/htmMCATS"
+workspace=$(pwd)
 ATTEMPTS=1
 
 blocks[1]="5"
@@ -62,7 +62,7 @@ do
     for t in {1..8}
     do
         cd $workspace;
-        bash build.sh 5 1 $t ${blocks[$b]};
+        bash build.sh 5 1 $t ${blocks[$b]} 1000;
         for (( a=1; a<=$ATTEMPTS; a++ ));
         do
             cd $workspace;
