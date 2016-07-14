@@ -66,7 +66,7 @@ typedef struct thread_metadata {
     long i_am_the_collector_thread;
     long i_am_waiting;
     long first_tx_run;
-    char suffixPadding[64];
+    char suffixPadding[CACHE_LINE_SIZE];
     unsigned long updateStatsCounter;
     // MCATS code start
 
@@ -85,20 +85,20 @@ typedef struct thread_metadata {
 	unsigned long acquired_locks_per_cycle;
     // MCATS code end
 
-} __attribute__((aligned(64))) thread_metadata_t;
+} __attribute__((aligned(CACHE_LINE_SIZE))) thread_metadata_t;
 
-__attribute__((aligned(64))) thread_metadata_t statistics[NUMBER_THREADS];
-__attribute__((aligned(64))) static volatile unsigned long tx_cluster_table[NUMBER_ATOMIC_BLOCKS][2];
-__attribute__((aligned(64))) unsigned long committed_tx_per_tuning_cycle;
-__attribute__((aligned(64))) unsigned long main_thread;
-__attribute__((aligned(64))) unsigned long current_collector_thread;
-__attribute__((aligned(64))) float lambda;
-__attribute__((aligned(64))) float mu;
-__attribute__((aligned(64))) unsigned long m;
-__attribute__((aligned(64))) unsigned long total_aborted_runs_per_state[NUMBER_THREADS+1]; \
-__attribute__((aligned(64))) unsigned long total_committed_runs_per_state[NUMBER_THREADS+1]; \
-__attribute__((aligned(64))) unsigned long total_acquired_locks_per_state[NUMBER_THREADS+1]; \
-__attribute__((aligned(64))) float predicted_throughput;
+__attribute__((aligned(CACHE_LINE_SIZE))) thread_metadata_t statistics[NUMBER_THREADS];
+__attribute__((aligned(CACHE_LINE_SIZE))) static volatile unsigned long tx_cluster_table[NUMBER_ATOMIC_BLOCKS][2];
+__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long committed_tx_per_tuning_cycle;
+__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long main_thread;
+__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long current_collector_thread;
+__attribute__((aligned(CACHE_LINE_SIZE))) float lambda;
+__attribute__((aligned(CACHE_LINE_SIZE))) float mu;
+__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long m;
+__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long total_aborted_runs_per_state[NUMBER_THREADS+1]; \
+__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long total_committed_runs_per_state[NUMBER_THREADS+1]; \
+__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long total_acquired_locks_per_state[NUMBER_THREADS+1]; \
+__attribute__((aligned(CACHE_LINE_SIZE))) float predicted_throughput;
 
 typedef unsigned long tm_time_t;
 
