@@ -33,11 +33,29 @@
 #  include <immintrin.h>
 #  include <rtmintrin.h>
 
+#  include <stddef.h>
+#  include <stdio.h>
+
 #  define TM_ARG                        /* nothing */
 #  define TM_ARG_ALONE                  /* nothing */
 #  define TM_ARGDECL                    /* nothing */
 #  define TM_ARGDECL_ALONE              /* nothing */
 #  define TM_CALLABLE                   /* nothing */
+
+// Cache Line size code start
+
+#define CACHE_LINE_SIZE ({ \
+   		FILE * p = 0; \
+   		p = fopen("/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size", "r"); \
+   		unsigned int i = 0; \
+   		if (p) { \
+       		fscanf(p, "%d", &i); \
+       		fclose(p); \
+    	} \
+    	i; \
+	})
+
+// Cache Line size code end
 
 // MCATS code start
 
