@@ -160,19 +160,19 @@ tm_time_t last_tuning_time; \
 #  define PRINT_STATS() { \
 		printf("==================CYCLE STATS==================\n"); \
 		printf("id = %i\tstate = %i\tcurrent_cwnd = %i\n", myThreadId, state, concurrency_window_size); \
-		printf("Current Cycle Commits = %ld\tLast Cycle Commits = %ld\n", current_cycle_commits, last_cycle_commits); \
+		printf("Current Cycle Commits = %u\tLast Cycle Commits = %u\n", current_cycle_commits, last_cycle_commits); \
 		printf("Cycle duration: %lu\n", TM_CYCLE_ETA()); \
 		printf("===============================================\n"); \
 	}
 
 #  define PRINT_SUMMARY_STATS() { \
 	printf("==============SUMMARY STATS==================\n"); \
-	printf("DURATION: min = %lu\tmax = %lu\tavg = %lu\n", min_cycle_duration, max_cycle_duration, avg_cycle_duration/num_cycles); \
-	printf("COMMITS: min = %lu\tmax = %lu\tavg = %lu\n", min_num_commits, max_num_commits, avg_num_commits/num_cycles); \
+	printf("DURATION: min = %u\tmax = %u\tavg = %u\n", min_cycle_duration, max_cycle_duration, avg_cycle_duration/num_cycles); \
+	printf("COMMITS: min = %u\tmax = %u\tavg = %u\n", min_num_commits, max_num_commits, avg_num_commits/num_cycles); \
 	int i; \
 	printf("===============THREAD STATS==================\n"); \
 	for (i = 0; i < NUMBER_THREADS; i++) { \
-		printf("thread %i: %lu\t", thread_stats[i]); \
+		printf("thread %i: %u\t",i ,thread_stats[i]); \
 	} \
 	printf("\n"); \
 	printf("=============================================\n"); \
@@ -189,22 +189,43 @@ tm_time_t last_tuning_time; \
 # define AL_LOCK(idx)
 
 # define TM_BEGIN(b) { \
-		TM_GATE(); \
+        int cycles; \
+        int rand_wait = rand() * 1000; \
+        TM_GATE(); \
+        while (1) { \
+            if (IS_LOCKED(is_fallback)) { \
+            	while (IS_LOCKED(is_fallback)) { \
+            	    for (cycles = 0; cycles < rand_wait; cycles++) { \
+                        __asm__ ("pause;"); \
+                    } \
+            	} \
+            } \
+            while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
+                for (cycles = 0; cycles < rand_wait; cycles++) { \
+                    __asm__ ("pause;"); \
+                } \
+            } \
+            break; \
+        } \
     }
 
 #define TM_GATE() { \
 		int cycles = 0; \
 		int rand_wait = rand() * 1000; \
-		if (IS_LOCKED(gate_lock)) { \
-        	while (IS_LOCKED(gate_lock)) { \
-       	    	for (cycles = 0; cycles < rand_wait; cycles++) \
-                __asm__ ( "pause;"); \
-        	} \
- 		} \
-    	while (__sync_val_compare_and_swap(&gate_lock, 0, 1) == 1) { \
-   	    	for (cycles = 0; cycles < rand_wait; cycles++) { \
-            	__asm__ ("pause;"); \
-        	} \
+		while (1) { \
+			if (IS_LOCKED(gate_lock)) { \
+        		while (IS_LOCKED(gate_lock)) { \
+       	    		for (cycles = 0; cycles < rand_wait; cycles++) { \
+                		__asm__ ("pause;"); \
+                	} \
+        		} \
+ 			} \
+    		while (__sync_val_compare_and_swap(&gate_lock, 0, 1) == 1) { \
+   	    		for (cycles = 0; cycles < rand_wait; cycles++) { \
+           	 		__asm__ ("pause;"); \
+        		} \
+    		} \
+    		break; \
     	} \
 		if (gated[myThreadId]) { \
 			gate_lock = 0; \
@@ -215,7 +236,8 @@ tm_time_t last_tuning_time; \
   	}
 
 # define TM_END() { \
-		if (myThreadId == 0) { \
+		is_fallback = 0; \
+		if (!myThreadId) { \
 			current_cycle_commits++; \
 			if (TM_CYCLE_ETA() >= CYCLE_MILLIS) { \
 				TM_NEW_CWND(); \
