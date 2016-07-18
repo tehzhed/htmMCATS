@@ -28,13 +28,17 @@
 #  include "thread.h"
 #  include "types.h"
 #  include "thread.h"
-#  include <math.h>
 
 #  include <immintrin.h>
 #  include <rtmintrin.h>
 
 #  include <stddef.h>
 #  include <stdio.h>
+#  include <stdlib.h>
+#  include <time.h>
+#  include <unistd.h>
+#  include <semaphore.h>
+#  include <math.h>
 
 #  define TM_ARG                        /* nothing */
 #  define TM_ARG_ALONE                  /* nothing */
@@ -42,63 +46,60 @@
 #  define TM_ARGDECL_ALONE              /* nothing */
 #  define TM_CALLABLE                   /* nothing */
 
-// Cache Line size code start
-
 #define CACHE_LINE_SIZE ({ \
-   		FILE * p = 0; \
-   		p = fopen("/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size", "r"); \
-   		unsigned int i = 0; \
-   		if (p) { \
-       		fscanf(p, "%d", &i); \
-       		fclose(p); \
-    	} \
-    	i; \
-	})
+   	FILE *p = fopen("/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size", "r"); \
+   	unsigned int i = 0; \
+   	if (p) { \
+  		fscanf(p, "%d", &i); \
+   		fclose(p); \
+    } \
+    i; \
+})
 
-// Cache Line size code end
+#define min(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a < _b ? _a : _b; })
 
-// MCATS code start
+#define max(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a > _b ? _a : _b; })
 
-typedef struct thread_metadata {
-    long totalAborts;
-    long abortedTxs;
-    long totalCommits;
-    long i_am_the_collector_thread;
-    long i_am_waiting;
-    long first_tx_run;
-    char suffixPadding[CACHE_LINE_SIZE];
-    unsigned long updateStatsCounter;
-    // MCATS code start
+typedef enum {
+	INCREASING,
+	DECREASING
+} tm_state_t;
 
-    unsigned long total_run_execution_time_per_state_per_cycle[NUMBER_THREADS+1];
-    unsigned long total_committed_runs_per_state_per_cycle[NUMBER_THREADS+1];
-    unsigned long total_aborted_runs_per_state_per_cycle[NUMBER_THREADS+1];
-    unsigned long total_acquired_locks_per_state_per_cycle[NUMBER_THREADS+1];
-    unsigned long total_run_execution_time_per_cycle;
-    unsigned long total_no_tx_time_per_cycle;
-    unsigned long total_spin_time_per_cycle;
-    unsigned long start_tx_time;
-    unsigned long start_no_tx_time;
-    unsigned long wait_cycles;
-    unsigned long commits_per_cycle;
-	unsigned long aborts_per_cycle;
-	unsigned long acquired_locks_per_cycle;
-    // MCATS code end
+__attribute__((aligned(64))) unsigned int concurrency_window_size;
+__attribute__((aligned(64))) unsigned long last_cycle_timestamp;
+__attribute__((aligned(64))) unsigned int last_cycle_commits;
+__attribute__((aligned(64))) unsigned int current_cycle_commits;
+__attribute__((aligned(64))) unsigned int gated[NUMBER_THREADS];
+__attribute__((aligned(64))) sem_t gateSemaphore[NUMBER_THREADS];
+__attribute__((aligned(64))) unsigned long  min_cycle_duration;
+__attribute__((aligned(64))) unsigned long  max_cycle_duration;
+__attribute__((aligned(64))) unsigned long  avg_cycle_duration;
+__attribute__((aligned(64))) unsigned int min_num_commits;
+__attribute__((aligned(64))) unsigned int max_num_commits;
+__attribute__((aligned(64))) unsigned int avg_num_commits;
+__attribute__((aligned(64))) unsigned int num_cycles;
+__attribute__((aligned(64))) unsigned int thread_stats[NUMBER_THREADS];
+__attribute__((aligned(64))) tm_state_t state;
 
-} __attribute__((aligned(CACHE_LINE_SIZE))) thread_metadata_t;
+__attribute__((aligned(64))) static volatile unsigned long gate_lock = 0;
 
-__attribute__((aligned(CACHE_LINE_SIZE))) thread_metadata_t statistics[NUMBER_THREADS];
-__attribute__((aligned(CACHE_LINE_SIZE))) static volatile unsigned long tx_cluster_table[NUMBER_ATOMIC_BLOCKS][2];
-__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long committed_tx_per_tuning_cycle;
-__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long main_thread;
-__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long current_collector_thread;
-__attribute__((aligned(CACHE_LINE_SIZE))) float lambda;
-__attribute__((aligned(CACHE_LINE_SIZE))) float mu;
-__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long m;
-__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long total_aborted_runs_per_state[NUMBER_THREADS+1]; \
-__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long total_committed_runs_per_state[NUMBER_THREADS+1]; \
-__attribute__((aligned(CACHE_LINE_SIZE))) unsigned long total_acquired_locks_per_state[NUMBER_THREADS+1]; \
-__attribute__((aligned(CACHE_LINE_SIZE))) float predicted_throughput;
+
+#define CURRENT_TIMESTAMP() ({ \
+	struct timeval  tv; \
+	gettimeofday(&tv, NULL); \
+	unsigned long time_in_mill = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ; \         	
+	time_in_mill; \
+})
+
+#define CYCLE_MILLIS 10000
+
+#define NUMBER_CORES sysconf(_SC_NPROCESSORS_ONLN)
 
 typedef unsigned long tm_time_t;
 
@@ -112,29 +113,38 @@ typedef unsigned long tm_time_t;
 
 tm_time_t last_tuning_time; \
 
-#  define TM_STARTUP(numThread, bId){ \
-        benchmarkId = bId; \
-        current_collector_thread_id=0; \
-        tx_cluster_table[0][1]=NUMBER_THREADS; \
-        MAX_ATTEMPTS = TOTAL_ATTEMPTS; \
-        APRIORI_ATTEMPTS = APRIORI_LOCK_ATTEMPTS; \
-        TXS_PER_MCATS_TUNING_CYCLE = TXS_PER_TUNING_CYCLE/NUMBER_THREADS; \
-        int i; \
-		for (i = 0; i < NUMBER_THREADS; i++) { \
-			statistics[i].totalCommits = 0; \
-			statistics[i].abortedTxs = 0; \
-			statistics[i].totalAborts = 0; \
+#  define TM_STARTUP(numThread, bId) { \
+		assert(numThread == NUMBER_THREADS); \
+		printf("startup num_threads = %lu\n", NUMBER_THREADS); \
+		fflush(stdout); \
+		concurrency_window_size = NUMBER_CORES; \
+		last_cycle_timestamp = CURRENT_TIMESTAMP(); \
+		concurrency_window_size = NUMBER_THREADS > 1 ? 2 : 1; \
+		int t_index; \
+		for (t_index = concurrency_window_size; t_index < NUMBER_THREADS; t_index++) { \
+			gated[t_index] = t_index < concurrency_window_size ? 0 : 1; \
 		} \
-    	RESET_MCATS_STATS(); \
-    	last_tuning_time=TM_TIMER_READ(); \
-        printf("BenchId = %d\tNumThread = %d\tAttBefGlLock = %d\tAPriLockAtt = %d ",benchmarkId, numThread, MAX_ATTEMPTS, APRIORI_ATTEMPTS); \
+		min_cycle_duration = 0; \
+		max_cycle_duration = 0; \
+		avg_cycle_duration = 0; \
+		min_num_commits = 0; \
+		max_num_commits = 0; \
+		avg_num_commits = 0; \
+		num_cycles = 0; \
+		memset(thread_stats, 0, sizeof(thread_stats)); \
+	}
+
+#  define TM_SHUTDOWN() { \
+	PRINT_SUMMARY_STATS(); \
 }
 
-#  define TM_SHUTDOWN()
+#  define TM_THREAD_ENTER() { \
+	printf("id: %i\tthread enter\n", myThreadId); \
+}
 
-#  define TM_THREAD_ENTER()
-
-#  define TM_THREAD_EXIT()
+#  define TM_THREAD_EXIT() { \
+	printf("id: %i\tthread exit\n", myThreadId); \
+}
 
 #  define TM_BEGIN_WAIVER()
 #  define TM_END_WAIVER()
@@ -147,29 +157,30 @@ tm_time_t last_tuning_time; \
 # define SETUP_NUMBER_TASKS(n)
 # define SETUP_NUMBER_THREADS(n)
 
-# define PRINT_STATS() { \
-	unsigned long total_aborts = 0;\
-    unsigned long total_commits = 0; \
-    unsigned long aborted_txs = 0; \
-    int t; \
-    for (t = 0; t < NUMBER_THREADS; t++) { \
-    	total_aborts += statistics[t].totalAborts; \
-    	total_commits += statistics[t].totalCommits; \
-    	aborted_txs += statistics[t].abortedTxs; \
-    } \
-    printf("Commits = %ld\taborted = %ld\taborts = %ld ", total_commits, aborted_txs, total_aborts); \
-}
+#  define PRINT_STATS() { \
+		printf("==================CYCLE STATS==================\n"); \
+		printf("id = %i\tstate = %i\tcurrent_cwnd = %i\n", myThreadId, state, concurrency_window_size); \
+		printf("Current Cycle Commits = %ld\tLast Cycle Commits = %ld\n", current_cycle_commits, last_cycle_commits); \
+		printf("Cycle duration: %lu\n", TM_CYCLE_ETA()); \
+		printf("===============================================\n"); \
+	}
 
+#  define PRINT_SUMMARY_STATS() { \
+	printf("==============SUMMARY STATS==================\n"); \
+	printf("DURATION: min = %lu\tmax = %lu\tavg = %lu\n", min_cycle_duration, max_cycle_duration, avg_cycle_duration/num_cycles); \
+	printf("COMMITS: min = %lu\tmax = %lu\tavg = %lu\n", min_num_commits, max_num_commits, avg_num_commits/num_cycles); \
+	int i; \
+	printf("===============THREAD STATS==================\n"); \
+	for (i = 0; i < NUMBER_THREADS; i++) { \
+		printf("thread %i: %lu\t", thread_stats[i]); \
+	} \
+	printf("\n"); \
+	printf("=============================================\n"); \
+}
 
 # define PRINT_CLOCK_THROUGHPUT(CLOCKS) { \
-	unsigned long total_commits = 0; \
-	int t; \
-	for (t = 0; t < NUMBER_THREADS; t++) { \
-		total_commits += statistics[t].totalCommits; \
-	} \
-	printf("clock throghput = %f ", (float)(1000000 *total_commits)/(float)(CLOCKS)); \
-}
-
+		printf("Clock throughtput = %f\n", (float)(1000000 * current_cycle_commits)/(float)(CLOCKS)); \
+	}
 
 # define IS_LOCKED(lock)        *((volatile int*)(&lock)) != 0
 
@@ -177,333 +188,107 @@ tm_time_t last_tuning_time; \
 
 # define AL_LOCK(idx)
 
-
-#define RESET_MCATS_STATS() { \
-		int t,s; \
-		for (t = 0; t < NUMBER_THREADS; t++) { \
-			for (s = 0; s < NUMBER_THREADS+1; s++) { \
-				statistics[t].total_run_execution_time_per_state_per_cycle[s]=0; \
-				statistics[t].total_committed_runs_per_state_per_cycle[s]=0; \
-				statistics[t].total_aborted_runs_per_state_per_cycle[s]=0; \
-				statistics[t].total_acquired_locks_per_state_per_cycle[s]=0; \
-			} \
-			statistics[t].total_run_execution_time_per_cycle=0; \
-			statistics[t].total_no_tx_time_per_cycle=0; \
-			statistics[t].total_spin_time_per_cycle=0; \
-			statistics[t].commits_per_cycle=0; \
-			statistics[t].aborts_per_cycle=0; \
-			statistics[t].acquired_locks_per_cycle=0; \
-		} \
-	}
-
-#define GET_THROUGHPUT() { \
-		gsl_vector *b = gsl_vector_alloc(2 * NUMBER_THREADS); \
-		gsl_vector *x = gsl_vector_alloc(2 * NUMBER_THREADS); \
-		gsl_matrix *Q = gsl_matrix_alloc(2 * NUMBER_THREADS, 2 * NUMBER_THREADS); \
-		gsl_vector_set_zero(b); \
-		gsl_vector_set(b, 2*NUMBER_THREADS-1,1); \
-		gsl_matrix_set_zero(Q); \
-		float value; \
-		int i; \
-		for (i = 1; i <= NUMBER_THREADS; i++) { \
-			value=(NUMBER_THREADS-(i-1))*lambda; \
-			gsl_matrix_set(Q,i, i-1, value); \
-			gsl_matrix_set(Q,i-1, i-1, -value+gsl_matrix_get(Q,i-1, i-1)); \
-		} \
-		for (i = NUMBER_THREADS+2; i <= 2*NUMBER_THREADS-1; i++) { \
-			value=(NUMBER_THREADS-(i-NUMBER_THREADS))*lambda; \
-			gsl_matrix_set(Q,i, i-1, value); \
-			gsl_matrix_set(Q,i-1, i-1, -value+gsl_matrix_get(Q,i-1, i-1)); \
-		} \
-		for (i = 1; i <= m; i++) { \
-			value=i*mu*((float)total_committed_runs_per_state[i]/((float)total_committed_runs_per_state[i]+(float)total_aborted_runs_per_state[i])); \
-			gsl_matrix_set(Q,i-1, i, value); \
-			gsl_matrix_set(Q,i, i, -value+gsl_matrix_get(Q,i,i)); \
-		} \
-		for (i = m+1; i <= NUMBER_THREADS; i++) { \
-			value= m*mu*((float)total_committed_runs_per_state[m]/((float)total_committed_runs_per_state[m]+(float)total_aborted_runs_per_state[m])); \
-			gsl_matrix_set(Q,i-1, i,value); \
-			gsl_matrix_set(Q,i, i, -value+gsl_matrix_get(Q,i,i)); \
-		} \
-		for (i = NUMBER_THREADS+1; i<= 2*NUMBER_THREADS-1; i++) { \
-			gsl_matrix_set(Q,i-NUMBER_THREADS, i, mu); \
-			gsl_matrix_set(Q,i, i, -mu+gsl_matrix_get(Q,i,i)); \
-		} \
-		for (i = 2; i<= m; i++) { \
-			value= i*mu*((float)total_acquired_locks_per_state[i]/((float)total_committed_runs_per_state[i]+(float)total_aborted_runs_per_state[i])); \
-			gsl_matrix_set(Q,NUMBER_THREADS+i-1, i,value); \
-			gsl_matrix_set(Q,i,i, -value+gsl_matrix_get(Q,i,i)); \
-		} \
-		for (i = m+1; i <= NUMBER_THREADS; i++) { \
-			value=m*mu*((float)total_acquired_locks_per_state[m]/((float)total_committed_runs_per_state[m]+(float)total_aborted_runs_per_state[m])); \
-			gsl_matrix_set(Q,NUMBER_THREADS+i-1, i, value); \
-			gsl_matrix_set(Q,i,i, -value+gsl_matrix_get(Q,i,i)); \
-		} \
-		for (i = 0; i <= 2*NUMBER_THREADS-1; i++) { \
-			gsl_matrix_set(Q,2*NUMBER_THREADS-1, i, 1); \
-		} \
-		printf ("\nQ:\n"); \
-		int j; \
-		for (i = 0; i <= 2*NUMBER_THREADS-1; i++) { \
-		    for (j = 0; j <= 2*NUMBER_THREADS-1; j++) \
-		    	printf ("%.2f\t",gsl_matrix_get (Q, i, j)); \
-		    printf ("\n"); \
-		} \
-		gsl_permutation *p=gsl_permutation_alloc(2 * NUMBER_THREADS); \
-		int s; \
-		gsl_linalg_LU_decomp(Q, p, &s); \
-		gsl_linalg_LU_solve(Q, p, b, x); \
-		printf ("x:\n"); \
-		for (i = 0; i <= 2*NUMBER_THREADS-1; i++) { \
-		    	printf ("%.2f\t",gsl_vector_get (x, i)); \
-		} \
-		predicted_throughput=0; \
-		for (i = 1; i <= NUMBER_THREADS; i++) \
-			predicted_throughput+=gsl_matrix_get(Q,i-1, i)*gsl_vector_get(x,i); \
-		for (i = NUMBER_THREADS+1; i<= 2*NUMBER_THREADS-1; i++) \
-			predicted_throughput+=gsl_matrix_get(Q,i-NUMBER_THREADS, i)*gsl_vector_get(x,i); \
-		gsl_permutation_free(p); \
-		gsl_vector_free(x); \
-}
-
-#define TUNE_MCATS() { \
-	printf("\nTuning ... Current_collector_thread_id %i", current_collector_thread_id); \
-	int t,s; \
-	fflush(stdout); \
-	tm_time_t total_run_execution_time=0; \
-	tm_time_t total_no_tx_time=0; \
-	tm_time_t total_tx_spin_time=0; \
-	long total_committed_runs=0; \
-	long total_aborted_runs=0; \
-	long total_acquired_locks=0; \
-	float avg_running_tx=0; \
-	memset(total_aborted_runs_per_state, 0, (NUMBER_THREADS+1) * sizeof(long)); \
-	memset(total_committed_runs_per_state, 0, (NUMBER_THREADS+1) * sizeof(long)); \
-	memset(total_acquired_locks_per_state, 0, (NUMBER_THREADS+1) * sizeof(long)); \
-	for (t = 0; t < NUMBER_THREADS; t++) { \
-		total_run_execution_time+=statistics[t].total_run_execution_time_per_cycle; \
-		total_no_tx_time+=statistics[t].total_no_tx_time_per_cycle; \
-		total_tx_spin_time+=statistics[t].total_spin_time_per_cycle; \
-		total_committed_runs+=statistics[t].commits_per_cycle; \
-		total_aborted_runs+=statistics[t].aborts_per_cycle; \
-		total_acquired_locks+=statistics[t].acquired_locks_per_cycle; \
-		int s; \
-		printf("\nThread %i", t); \
-		for (s = 0; s < NUMBER_THREADS+1; s++) { \
-			total_committed_runs_per_state[s]+=statistics[t].total_committed_runs_per_state_per_cycle[s]; \
-			printf("\tc %llu", statistics[t].total_committed_runs_per_state_per_cycle[s]); \
-			total_aborted_runs_per_state[s]+=statistics[t].total_aborted_runs_per_state_per_cycle[s]; \
-			printf("\ta %llu", statistics[t].total_aborted_runs_per_state_per_cycle[s]); \
-			total_acquired_locks_per_state[s]+=statistics[t].total_acquired_locks_per_state_per_cycle[s]; \
-			printf("\tl %llu", statistics[t].total_acquired_locks_per_state_per_cycle[s]); \
-			printf(" |"); \
-		} \
-	} \
-	long t_total_committed_runs_per_state=0; \
-	long t_total_aborted_runs_per_state=0; \
-	long t_total_acquired_locks_per_state=0; \
-	for (s = 0; s < NUMBER_THREADS+1; s++) { \
-		t_total_committed_runs_per_state+=total_committed_runs_per_state[s]; \
-		t_total_aborted_runs_per_state+=total_aborted_runs_per_state[s]; \
-		t_total_acquired_locks_per_state+=total_acquired_locks_per_state[s]; \
-	} \
-	printf("\n-------------"); \
-	printf("\ntotal_run_execution_time_per_cycle %llu",total_run_execution_time); \
-	printf("\ntotal_no_tx_time_per_cycle %llu",total_no_tx_time); \
-	printf("\ntotal_spin_time_per_cycle %llu",total_tx_spin_time); \
-	printf("\ncommits_per_cycle %llu %llu",total_committed_runs, t_total_committed_runs_per_state); \
-	printf("\naborted_txs_per_cycle %llu %llu",total_aborted_runs, t_total_aborted_runs_per_state); \
-	printf("\nacquired_locks_per_aborted_txs_per_cycle %llu %llu",total_acquired_locks, t_total_acquired_locks_per_state); \
-	lambda = 1.0 / (((float) total_no_tx_time/(float)1000000)/(float) total_committed_runs); \
-	mu= 1.0 / ((((float) total_run_execution_time / (float)1000000) / (float)(total_committed_runs+total_aborted_runs))); \
-	m=tx_cluster_table[0][1]; \
-	GET_THROUGHPUT(); \
-	double measured_th =NUMBER_THREADS*(double)t_total_committed_runs_per_state*1000000/((double)(TM_TIMER_READ()-last_tuning_time)); \
-	printf("\nPredicted throughput %f\nMeasured throughput %f\n-----------------",predicted_throughput, measured_th); \
-	fflush(stdout); \
-	last_tuning_time=TM_TIMER_READ(); \
-};
-
-#define TM_WAIT() { \
-    thread_metadata_t* myStats = &(statistics[myThreadId]); \
-	int active_txs,entered=0; \
-	tm_time_t start_spin_time; \
-	active_txs=tx_cluster_table[0][0]; \
-	if(active_txs<tx_cluster_table[0][1]){ \
-		if (__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs+1) == active_txs) { \
-			if(myStats->i_am_the_collector_thread){ \
-				myStats->start_tx_time=TM_TIMER_READ(); \
-				myStats->total_no_tx_time_per_cycle+=myStats->start_tx_time - myStats->start_no_tx_time; \
-			} \
-			entered=1; \
-		} \
-	} \
-	if (entered==0){ \
-		if(myStats->i_am_the_collector_thread==1){ \
-			start_spin_time=TM_TIMER_READ(); \
-			myStats->total_no_tx_time_per_cycle+=start_spin_time - myStats->start_no_tx_time; \
-		} \
-		int wait_cycles=myStats->wait_cycles, i=1; \
-		while(1) { \
-			active_txs=tx_cluster_table[0][0]; \
-			if(active_txs<tx_cluster_table[0][1]) \
-				if (__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs+1) == active_txs) { \
-					break; \
-				} \
-				myStats->i_am_waiting=1; \
-			for(i=0;i<wait_cycles;i++){ \
-				if(myStats->i_am_waiting==0) break; \
-			} \
-			myStats->i_am_waiting=0; \
-		} \
-	} \
-	if (myStats->i_am_the_collector_thread==1){ \
-		if (entered==0) { \
-			myStats->start_tx_time=TM_TIMER_READ(); \
-			myStats->total_spin_time_per_cycle+=myStats->start_tx_time-start_spin_time; \
-		} \
-	} \
-}
-
-#define TM_SIGNAL() { \
-        thread_metadata_t* myStats = &(statistics[myThreadId]); \
-        if (myStats->i_am_the_collector_thread==1){ \
-        	myStats->commits_per_cycle++; \
-        	myStats->start_no_tx_time=TM_TIMER_READ(); \
-        	int active_txs=tx_cluster_table[0][0]; \
-        	while ((__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs-1) != active_txs)) { \
-        		for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
-        			__asm__ ("pause;"); \
-        		} \
-				active_txs=tx_cluster_table[0][0]; \
-        	} \
-			tm_time_t run_execution_time = myStats->start_no_tx_time - myStats->start_tx_time; \
-			myStats->total_run_execution_time_per_state_per_cycle[active_txs]+=run_execution_time; \
-			myStats->total_committed_runs_per_state_per_cycle[active_txs]++; \
-			myStats->total_run_execution_time_per_cycle+=run_execution_time; \
-			if(myStats->commits_per_cycle==TXS_PER_MCATS_TUNING_CYCLE){ \
-				if(myThreadId==NUMBER_THREADS - 1) { \
-					myStats->total_no_tx_time_per_cycle+=TM_TIMER_READ() - myStats->start_no_tx_time; \
-					TUNE_MCATS(); \
-					RESET_MCATS_STATS(); \
-					myStats->start_no_tx_time=TM_TIMER_READ(); \
-				} \
-				current_collector_thread_id =(current_collector_thread_id + 1)% NUMBER_THREADS; \
-				myStats->i_am_the_collector_thread=0; \
-			} \
-        }else if(current_collector_thread_id==myThreadId){ \
-        	fflush(stdout); \
-        	myStats->start_no_tx_time=TM_TIMER_READ(); \
-        	int active_txs=tx_cluster_table[0][0]; \
-        	while ((__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs-1) != active_txs)) { \
-        		for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
-        			__asm__ ("pause;"); \
-        		} \
-				active_txs=tx_cluster_table[0][0]; \
-        	} \
-			myStats->i_am_the_collector_thread=1; \
-        } else { \
-        	fflush(stdout); \
-        	int active_txs=tx_cluster_table[0][0]; \
-        	while ((__sync_val_compare_and_swap(&tx_cluster_table[0][0], active_txs, active_txs-1) != active_txs)) { \
-        		for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
-        			__asm__ ("pause;"); \
-        		} \
-				active_txs=tx_cluster_table[0][0]; \
-        	} \
-        } \
-		int t; \
-		for (t = 0; t < NUMBER_THREADS; t++) { \
-			if(statistics[t].i_am_waiting==1){ \
-				statistics[t].i_am_waiting=0; \
-				break; \
-			} \
-		} \
-}
-
-
-# define TM_BEGIN_(b) { \
-        thread_metadata_t* myStats = &(statistics[myThreadId]); \
-        int cycles = 0; \
-        int tries = MAX_ATTEMPTS; \
-        TM_WAIT(); \
-        myStats->first_tx_run=1; \
-        while (1) { \
-            if (IS_LOCKED(is_fallback)) { \
-                while (IS_LOCKED(is_fallback)) { \
-                    for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
-                        __asm__ ( "pause;"); \
-                    } \
-                } \
-            } \
-            int status = _xbegin(); \
-            if(myStats->i_am_the_collector_thread && !myStats->first_tx_run){ \
-                        tm_time_t last_timer_value=TM_TIMER_READ(); \
-                        myStats->total_run_execution_time_per_state_per_cycle[tx_cluster_table[0][0]]+=last_timer_value - myStats->start_tx_time; \
-                        myStats->start_tx_time=last_timer_value; \
-                } \
-			myStats->first_tx_run=0; \
-            if (status == _XBEGIN_STARTED) { break; } \
-            int active_txs=tx_cluster_table[0][0]; \
-            tries--; \
-            myStats->totalAborts++; \
-            if(myStats->i_am_the_collector_thread) { \
-                myStats->aborts_per_cycle++; \
-                myStats->total_aborted_runs_per_state_per_cycle[active_txs]++; \
-            } \
-            if (tries <= 0) {   \
-                if(myStats->i_am_the_collector_thread) { \
-                        myStats->total_acquired_locks_per_state_per_cycle[active_txs]++; \
-                        myStats->acquired_locks_per_cycle++; \
-                } \
-                while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
-                    for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
-                        __asm__ ("pause;"); \
-                    } \
-                } \
-                break; \
-            } \
-        }
-
 # define TM_BEGIN(b) { \
-        thread_metadata_t* myStats = &statistics; \
-        int cycles = 0; \
-        int tries = MAX_ATTEMPTS; \
-        TM_WAIT(); \
-        while (1) { \
-            if (IS_LOCKED(is_fallback)) { \
-            	while (IS_LOCKED(is_fallback)) { \
-            	    for (cycles = 0; cycles < myStats->wait_cycles; cycles++) \
-                        __asm__ ( "pause;"); \
-            	} \
-            } \
-            while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
-                for (cycles = 0; cycles < myStats->wait_cycles; cycles++) { \
-                    __asm__ ("pause;"); \
-                } \
-            } \
-            break; \
-        }
+		TM_GATE(); \
+    }
 
+#define TM_GATE() { \
+		int cycles = 0; \
+		int rand_wait = rand() * 1000; \
+		if (IS_LOCKED(gate_lock)) { \
+        	while (IS_LOCKED(gate_lock)) { \
+       	    	for (cycles = 0; cycles < rand_wait; cycles++) \
+                __asm__ ( "pause;"); \
+        	} \
+ 		} \
+    	while (__sync_val_compare_and_swap(&gate_lock, 0, 1) == 1) { \
+   	    	for (cycles = 0; cycles < rand_wait; cycles++) { \
+            	__asm__ ("pause;"); \
+        	} \
+    	} \
+		if (gated[myThreadId]) { \
+			gate_lock = 0; \
+			sem_wait(&gateSemaphore[myThreadId]); \
+		} else { \
+			gate_lock = 0; \
+		} \
+  	}
 
-# define TM_END_() \
-	if (tries > 0) { \
-        if (IS_LOCKED(is_fallback)) { _xabort(30); } \
-		_xend(); \
-    } else {    \
-        is_fallback = 0; \
+# define TM_END() { \
+		if (myThreadId == 0) { \
+			current_cycle_commits++; \
+			if (TM_CYCLE_ETA() >= CYCLE_MILLIS) { \
+				TM_NEW_CWND(); \
+			} \
+		} \
+    }
+
+# define TM_CYCLE_ETA() ({ \
+    CURRENT_TIMESTAMP() - last_cycle_timestamp; \
+}) 
+
+# define TM_NEW_CWND() { \
+	PRINT_STATS(); \
+	if (num_cycles && !(num_cycles % 100)) { \
+		PRINT_SUMMARY_STATS(); \
+	} \
+	int cycles = 0; \
+	int rand_wait = rand() * 1000; \
+	if (IS_LOCKED(gate_lock)) { \
+        while (IS_LOCKED(gate_lock)) { \
+       	    for (cycles = 0; cycles < rand_wait; cycles++) \
+                __asm__ ( "pause;"); \
+        } \
+ 	} \
+    while (__sync_val_compare_and_swap(&gate_lock, 0, 1) == 1) { \
+   	    for (cycles = 0; cycles < rand_wait; cycles++) { \
+            __asm__ ("pause;"); \
+        } \
     } \
-    myStats->totalCommits++; \
-    TM_SIGNAL(); \
-};
-
-
-# define TM_END() \
-    is_fallback = 0; \
-    myStats->totalCommits++; \
-    TM_SIGNAL(); \
-};
-
+    int plus_signal = current_cycle_commits < last_cycle_commits ? 0 : 1; \
+	if (plus_signal) { \
+		if (state == INCREASING) { \
+			if (concurrency_window_size < NUMBER_THREADS) { \
+	 			gated[concurrency_window_size] = 0; \
+	 			sem_post(&gateSemaphore[concurrency_window_size]); \
+				concurrency_window_size++; \
+			} \
+		} else { \
+			if (concurrency_window_size > 1) { \
+				gated[concurrency_window_size - 1] = 1; \
+				concurrency_window_size--; \
+			}; \
+		} \
+	} else { \
+		if (state == INCREASING) { \
+			if (concurrency_window_size > 1) { \
+				gated[concurrency_window_size - 1] = 1; \
+				concurrency_window_size--; \
+			} \
+			state = DECREASING; \
+		} else { \
+			if (concurrency_window_size < NUMBER_THREADS) { \
+	 			gated[concurrency_window_size] = 0; \
+	 			sem_post(&gateSemaphore[concurrency_window_size]); \
+				concurrency_window_size++; \
+			} \
+			state = INCREASING; \
+		} \
+	} \
+	gate_lock = 0; \
+	num_cycles++; \
+	min_num_commits = min(min_num_commits, current_cycle_commits); \
+	max_num_commits = max(max_num_commits, current_cycle_commits); \
+	avg_num_commits += current_cycle_commits; \
+	int current_cycle_duration = TM_CYCLE_ETA(); \
+	min_cycle_duration = min(min_cycle_duration, current_cycle_duration); \
+	max_cycle_duration = max(max_cycle_duration, current_cycle_duration); \
+	avg_cycle_duration += current_cycle_duration; \
+	thread_stats[concurrency_window_size - 1]++; \
+	last_cycle_timestamp = CURRENT_TIMESTAMP(); \
+	last_cycle_commits = current_cycle_commits; \
+	current_cycle_commits = 0; \
+}
 
 
 
