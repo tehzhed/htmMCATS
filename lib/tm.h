@@ -71,23 +71,20 @@ typedef enum {
 	DECREASING
 } tm_state_t;
 
-__attribute__((aligned(64))) unsigned int concurrency_window_size;
-__attribute__((aligned(64))) unsigned long last_cycle_timestamp;
-__attribute__((aligned(64))) unsigned int last_cycle_commits;
-__attribute__((aligned(64))) unsigned int current_cycle_commits;
-__attribute__((aligned(64))) unsigned int gated[NUMBER_THREADS];
-__attribute__((aligned(64))) sem_t gateSemaphore[NUMBER_THREADS];
-__attribute__((aligned(64))) unsigned long  min_cycle_duration;
-__attribute__((aligned(64))) unsigned long  max_cycle_duration;
-__attribute__((aligned(64))) unsigned long  avg_cycle_duration;
+__attribute__((aligned(64))) static volatile unsigned long begin_lock = 0;
+__attribute__((aligned(64))) unsigned int active_count;
+__attribute__((aligned(64))) unsigned int quota;
+__attribute__((aligned(64))) unsigned int stalled;
+__attribute__((aligned(64))) unsigned int peak;
+__attribute__((aligned(64))) unsigned int commits;
+__attribute__((aligned(64))) pthread_t * daemon_thread;
+__attribute__((aligned(64))) unsigned int num_interval;
 __attribute__((aligned(64))) unsigned int min_num_commits;
 __attribute__((aligned(64))) unsigned int max_num_commits;
-__attribute__((aligned(64))) unsigned int avg_num_commits;
-__attribute__((aligned(64))) unsigned int num_cycles;
-__attribute__((aligned(64))) unsigned int thread_stats[NUMBER_THREADS];
-__attribute__((aligned(64))) tm_state_t state;
-
-__attribute__((aligned(64))) static volatile unsigned long gate_lock = 0;
+__attribute__((aligned(64))) unsigned long long avg_num_commits;
+__attribute__((aligned(64))) unsigned int min_quota;
+__attribute__((aligned(64))) unsigned int max_quota;
+__attribute__((aligned(64))) unsigned long long avg_quota;
 
 
 #define CURRENT_TIMESTAMP() ({ \
@@ -98,6 +95,8 @@ __attribute__((aligned(64))) static volatile unsigned long gate_lock = 0;
 })
 
 #define CYCLE_MILLIS 10000
+#define INTERVAL_MICROSECS 5000000
+#define WARMUP 10
 
 #define NUMBER_CORES sysconf(_SC_NPROCESSORS_ONLN)
 
@@ -113,29 +112,57 @@ typedef unsigned long tm_time_t;
 
 tm_time_t last_tuning_time; \
 
+static void inline throttle_policy() {
+	while (1) {
+		usleep (INTERVAL_MICROSECS);
+		num_interval++;
+		if (commits < WARMUP) {
+			continue;
+		}
+		float ratio = (float);
+		if (peak < quota) {
+			quota = peak;
+		} else if (stalled) {
+			quota++;
+		}
+		min_num_commits = min(min_num_commits, commits);
+		max_num_commits = max(max_num_commits, commits);
+		avg_num_commits += commits;
+		min_quota = min(min_quota, quota);
+		max_quota = max(max_quota, quota);
+		avg_quota += quota;
+		PRINT_STATS();
+		peak = 0;
+		commits = 0;
+		stalled = 0;
+	}
+}
+
 #  define TM_STARTUP(numThread, bId) { \
-		assert(numThread == NUMBER_THREADS); \
-		printf("startup num_threads = %lu\n", NUMBER_THREADS); \
-		fflush(stdout); \
-		concurrency_window_size = NUMBER_CORES; \
-		last_cycle_timestamp = CURRENT_TIMESTAMP(); \
-		concurrency_window_size = NUMBER_THREADS > 1 ? 2 : 1; \
-		int t_index; \
-		for (t_index = concurrency_window_size; t_index < NUMBER_THREADS; t_index++) { \
-			gated[t_index] = t_index < concurrency_window_size ? 0 : 1; \
-		} \
-		min_cycle_duration = 0; \
-		max_cycle_duration = 0; \
-		avg_cycle_duration = 0; \
+		active_count = 0; \
+		quota = 0; \
+		peak = 0; \
+		commits = 0; \
+		stalled = 0; \
+		num_interval = 0; \
 		min_num_commits = 0; \
 		max_num_commits = 0; \
 		avg_num_commits = 0; \
-		num_cycles = 0; \
-		memset(thread_stats, 0, sizeof(thread_stats)); \
+		min_quota = 0; \
+		max_quota = 0; \
+		avg_quota = 0; \
+		int ret = pthread_create(&daemon_thread, NULL, &throttle_policy, NULL); \
+		if (ret) { \
+			printf("Error: Failed to spawn daemon thread for throttle policy.\n"); \
+			exit(1); \
+		} \
 	}
 
 #  define TM_SHUTDOWN() { \
-	PRINT_SUMMARY_STATS(); \
+	int ret = pthread_cancel(daemon_thread); \
+	if (ret) { \
+		printf("Warning: Failed to cancel daemon thread for throttle policy.\n"); \
+	} \
 }
 
 #  define TM_THREAD_ENTER() { \
@@ -158,25 +185,13 @@ tm_time_t last_tuning_time; \
 # define SETUP_NUMBER_THREADS(n)
 
 #  define PRINT_STATS() { \
-		printf("==================CYCLE STATS==================\n"); \
-		printf("id = %i\tstate = %i\tcurrent_cwnd = %i\n", myThreadId, state, concurrency_window_size); \
-		printf("Current Cycle Commits = %u\tLast Cycle Commits = %u\n", current_cycle_commits, last_cycle_commits); \
-		printf("Cycle duration: %lu\n", TM_CYCLE_ETA()); \
+		printf("==================INTERVAL STATS==================\n"); \
+		printf("interval = %u\tquota = %u\tstalled = %i\n", num_interval, quota, stalled); \
+		printf("peak = %u\tcommits = %u\tactive count = %u\n". peak, commits, active_count); \
+		printf("commits -> min = %u\t max = %u\tavg = %u\n", min_num_commits, max_num_commits, avg_num_commits/num_interval); \
+		printf("quota -> min = %u\t max = %u\tavg = %u\n", min_quota, max_quota, avg_quota/num_interval); \
 		printf("===============================================\n"); \
 	}
-
-#  define PRINT_SUMMARY_STATS() { \
-	printf("==============SUMMARY STATS==================\n"); \
-	printf("DURATION: min = %u\tmax = %u\tavg = %u\n", min_cycle_duration, max_cycle_duration, avg_cycle_duration/num_cycles); \
-	printf("COMMITS: min = %u\tmax = %u\tavg = %u\n", min_num_commits, max_num_commits, avg_num_commits/num_cycles); \
-	int i; \
-	printf("===============THREAD STATS==================\n"); \
-	for (i = 0; i < NUMBER_THREADS; i++) { \
-		printf("thread %i: %u\t",i ,thread_stats[i]); \
-	} \
-	printf("\n"); \
-	printf("=============================================\n"); \
-}
 
 # define PRINT_CLOCK_THROUGHPUT(CLOCKS) { \
 		printf("Clock throughtput = %f\n", (float)(1000000 * current_cycle_commits)/(float)(CLOCKS)); \
@@ -189,8 +204,36 @@ tm_time_t last_tuning_time; \
 # define AL_LOCK(idx)
 
 # define TM_BEGIN(b) { \
-        int cycles; \
+		int cycles; \
         int rand_wait = rand() * 1000; \
+        while (1) { \
+			while (1) { \
+				if (IS_LOCKED(begin_lock)) { \
+        			while (IS_LOCKED(begin_lock)) { \
+       	    			for (cycles = 0; cycles < rand_wait; cycles++) { \
+                			__asm__ ("pause;"); \
+                		} \
+        			} \
+ 				} \
+    			while (__sync_val_compare_and_swap(&begin_lock, 0, 1) == 1) { \
+   	    			for (cycles = 0; cycles < rand_wait; cycles++) { \
+           	 			__asm__ ("pause;"); \
+        			} \
+    			} \
+    			break; \
+    		} \
+    		if (active_count >= quota) { \
+    			stalled = 1; \
+    			begin_lock = 0; \
+    			for (cycles = 0; cycles < rand_wait; cycles++) { \
+        	   	 	__asm__ ("pause;"); \
+        		} \
+    		} else { \
+    			active++; \
+    			peak = max(peak, active); \
+    			break; \
+    		} \
+    	} \
         TM_GATE(); \
         while (1) { \
             if (IS_LOCKED(is_fallback)) { \
@@ -209,109 +252,11 @@ tm_time_t last_tuning_time; \
         } \
     }
 
-#define TM_GATE() { \
-		int cycles = 0; \
-		int rand_wait = rand() * 1000; \
-		while (1) { \
-			if (IS_LOCKED(gate_lock)) { \
-        		while (IS_LOCKED(gate_lock)) { \
-       	    		for (cycles = 0; cycles < rand_wait; cycles++) { \
-                		__asm__ ("pause;"); \
-                	} \
-        		} \
- 			} \
-    		while (__sync_val_compare_and_swap(&gate_lock, 0, 1) == 1) { \
-   	    		for (cycles = 0; cycles < rand_wait; cycles++) { \
-           	 		__asm__ ("pause;"); \
-        		} \
-    		} \
-    		break; \
-    	} \
-		if (gated[myThreadId]) { \
-			gate_lock = 0; \
-			sem_wait(&gateSemaphore[myThreadId]); \
-		} else { \
-			gate_lock = 0; \
-		} \
-  	}
-
 # define TM_END() { \
 		is_fallback = 0; \
-		if (!myThreadId) { \
-			current_cycle_commits++; \
-			if (TM_CYCLE_ETA() >= CYCLE_MILLIS) { \
-				TM_NEW_CWND(); \
-			} \
-		} \
+		active_count--; \
+		commits++; \
     }
-
-# define TM_CYCLE_ETA() ({ \
-    CURRENT_TIMESTAMP() - last_cycle_timestamp; \
-}) 
-
-# define TM_NEW_CWND() { \
-	PRINT_STATS(); \
-	if (num_cycles && !(num_cycles % 100)) { \
-		PRINT_SUMMARY_STATS(); \
-	} \
-	int cycles = 0; \
-	int rand_wait = rand() * 1000; \
-	if (IS_LOCKED(gate_lock)) { \
-        while (IS_LOCKED(gate_lock)) { \
-       	    for (cycles = 0; cycles < rand_wait; cycles++) \
-                __asm__ ( "pause;"); \
-        } \
- 	} \
-    while (__sync_val_compare_and_swap(&gate_lock, 0, 1) == 1) { \
-   	    for (cycles = 0; cycles < rand_wait; cycles++) { \
-            __asm__ ("pause;"); \
-        } \
-    } \
-    int plus_signal = current_cycle_commits < last_cycle_commits ? 0 : 1; \
-	if (plus_signal) { \
-		if (state == INCREASING) { \
-			if (concurrency_window_size < NUMBER_THREADS) { \
-	 			gated[concurrency_window_size] = 0; \
-	 			sem_post(&gateSemaphore[concurrency_window_size]); \
-				concurrency_window_size++; \
-			} \
-		} else { \
-			if (concurrency_window_size > 1) { \
-				gated[concurrency_window_size - 1] = 1; \
-				concurrency_window_size--; \
-			}; \
-		} \
-	} else { \
-		if (state == INCREASING) { \
-			if (concurrency_window_size > 1) { \
-				gated[concurrency_window_size - 1] = 1; \
-				concurrency_window_size--; \
-			} \
-			state = DECREASING; \
-		} else { \
-			if (concurrency_window_size < NUMBER_THREADS) { \
-	 			gated[concurrency_window_size] = 0; \
-	 			sem_post(&gateSemaphore[concurrency_window_size]); \
-				concurrency_window_size++; \
-			} \
-			state = INCREASING; \
-		} \
-	} \
-	gate_lock = 0; \
-	num_cycles++; \
-	min_num_commits = min(min_num_commits, current_cycle_commits); \
-	max_num_commits = max(max_num_commits, current_cycle_commits); \
-	avg_num_commits += current_cycle_commits; \
-	int current_cycle_duration = TM_CYCLE_ETA(); \
-	min_cycle_duration = min(min_cycle_duration, current_cycle_duration); \
-	max_cycle_duration = max(max_cycle_duration, current_cycle_duration); \
-	avg_cycle_duration += current_cycle_duration; \
-	thread_stats[concurrency_window_size - 1]++; \
-	last_cycle_timestamp = CURRENT_TIMESTAMP(); \
-	last_cycle_commits = current_cycle_commits; \
-	current_cycle_commits = 0; \
-}
-
 
 
 #  define TM_BEGIN_RO()                 TM_BEGIN(0)
