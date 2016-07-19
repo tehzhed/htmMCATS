@@ -109,9 +109,6 @@ typedef unsigned long tm_time_t;
 	__asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi)); \
 	((tm_time_t)hi) << 32 | lo; \
 })
-// MCATS code end
-
-tm_time_t last_tuning_time; \
 
 #  define TM_STARTUP(numThread, bId) { \
 		assert(numThread == NUMBER_THREADS); \
