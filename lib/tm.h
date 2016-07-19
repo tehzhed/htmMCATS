@@ -77,11 +77,15 @@ __attribute__((aligned(64))) unsigned int quota;
 __attribute__((aligned(64))) unsigned int stalled;
 __attribute__((aligned(64))) unsigned int peak;
 __attribute__((aligned(64))) unsigned int commits;
+__attribute__((aligned(64))) unsigned int aborts;
 __attribute__((aligned(64))) pthread_t * daemon_thread;
 __attribute__((aligned(64))) unsigned int num_interval;
 __attribute__((aligned(64))) unsigned int min_num_commits;
 __attribute__((aligned(64))) unsigned int max_num_commits;
 __attribute__((aligned(64))) unsigned long long avg_num_commits;
+__attribute__((aligned(64))) unsigned int min_num_aborts;
+__attribute__((aligned(64))) unsigned int max_num_aborts;
+__attribute__((aligned(64))) unsigned long long avg_num_aborts;
 __attribute__((aligned(64))) unsigned int min_quota;
 __attribute__((aligned(64))) unsigned int max_quota;
 __attribute__((aligned(64))) unsigned long long avg_quota;
@@ -97,6 +101,7 @@ __attribute__((aligned(64))) unsigned long long avg_quota;
 #define CYCLE_MILLIS 10000
 #define INTERVAL_MICROSECS 5000000
 #define WARMUP 10
+#define THRESHOLD 0.8
 
 #define NUMBER_CORES sysconf(_SC_NPROCESSORS_ONLN)
 
@@ -108,9 +113,16 @@ typedef unsigned long tm_time_t;
 	__asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi)); \
 	((tm_time_t)hi) << 32 | lo; \
 })
-// MCATS code end
 
-tm_time_t last_tuning_time; \
+#  define PRINT_STATS() { \
+		printf("==================INTERVAL STATS==================\n"); \
+		printf("interval = %u\tquota = %u\tstalled = %i\n", num_interval, quota, stalled); \
+		printf("peak = %u\tcommits = %u\tactive count = %u\n", peak, commits, active_count); \
+		printf("commits -> min = %u\t max = %u\tavg = %u\n", min_num_commits, max_num_commits, avg_num_commits/num_interval); \
+		printf("aborts -> min = %u\t max = %u\tavg = %u\n", min_num_aborts, max_num_aborts, avg_num_aborts/num_interval); \
+		printf("quota -> min = %u\t max = %u\tavg = %u\n", min_quota, max_quota, avg_quota/num_interval); \
+		printf("==================================================\n"); \
+	}
 
 static void inline throttle_policy() {
 	while (1) {
@@ -119,9 +131,11 @@ static void inline throttle_policy() {
 		if (commits < WARMUP) {
 			continue;
 		}
-		float ratio = (float);
+		float ratio = (float)commits/(commits + aborts);
 		if (peak < quota) {
 			quota = peak;
+		} else if (ratio < THRESHOLD) {
+			quota--;
 		} else if (stalled) {
 			quota++;
 		}
@@ -134,6 +148,7 @@ static void inline throttle_policy() {
 		PRINT_STATS();
 		peak = 0;
 		commits = 0;
+		aborts = 0;
 		stalled = 0;
 	}
 }
@@ -143,6 +158,7 @@ static void inline throttle_policy() {
 		quota = 0; \
 		peak = 0; \
 		commits = 0; \
+		aborts = 0; \
 		stalled = 0; \
 		num_interval = 0; \
 		min_num_commits = 0; \
@@ -184,17 +200,8 @@ static void inline throttle_policy() {
 # define SETUP_NUMBER_TASKS(n)
 # define SETUP_NUMBER_THREADS(n)
 
-#  define PRINT_STATS() { \
-		printf("==================INTERVAL STATS==================\n"); \
-		printf("interval = %u\tquota = %u\tstalled = %i\n", num_interval, quota, stalled); \
-		printf("peak = %u\tcommits = %u\tactive count = %u\n". peak, commits, active_count); \
-		printf("commits -> min = %u\t max = %u\tavg = %u\n", min_num_commits, max_num_commits, avg_num_commits/num_interval); \
-		printf("quota -> min = %u\t max = %u\tavg = %u\n", min_quota, max_quota, avg_quota/num_interval); \
-		printf("===============================================\n"); \
-	}
-
 # define PRINT_CLOCK_THROUGHPUT(CLOCKS) { \
-		printf("Clock throughtput = %f\n", (float)(1000000 * current_cycle_commits)/(float)(CLOCKS)); \
+		printf("Clock throughtput = %f\n", (float)(1000000 * commits)/(float)(CLOCKS)); \
 	}
 
 # define IS_LOCKED(lock)        *((volatile int*)(&lock)) != 0
@@ -229,12 +236,11 @@ static void inline throttle_policy() {
         	   	 	__asm__ ("pause;"); \
         		} \
     		} else { \
-    			active++; \
-    			peak = max(peak, active); \
+    			active_count++; \
+    			peak = max(peak, active_count); \
     			break; \
     		} \
     	} \
-        TM_GATE(); \
         while (1) { \
             if (IS_LOCKED(is_fallback)) { \
             	while (IS_LOCKED(is_fallback)) { \
