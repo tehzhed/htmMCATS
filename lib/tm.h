@@ -72,6 +72,9 @@ typedef enum {
 } tm_state_t;
 
 __attribute__((aligned(64))) unsigned int concurrency_window_size;
+__attribute__((aligned(64))) unsigned int min_concurrency_window_size;
+__attribute__((aligned(64))) unsigned int max_concurrency_window_size;
+__attribute__((aligned(64))) unsigned long long avg_concurrency_window_size;
 __attribute__((aligned(64))) unsigned long last_cycle_timestamp;
 __attribute__((aligned(64))) unsigned int last_cycle_commits;
 __attribute__((aligned(64))) unsigned int current_cycle_commits;
@@ -80,11 +83,11 @@ __attribute__((aligned(64))) sem_t gateSemaphore[NUMBER_THREADS];
 __attribute__((aligned(64))) unsigned long  min_cycle_duration;
 __attribute__((aligned(64))) unsigned long  max_cycle_duration;
 __attribute__((aligned(64))) unsigned long  avg_cycle_duration;
-__attribute__((aligned(64))) unsigned int min_num_commits;
-__attribute__((aligned(64))) unsigned int max_num_commits;
-__attribute__((aligned(64))) unsigned int avg_num_commits;
-__attribute__((aligned(64))) unsigned int num_cycles;
-__attribute__((aligned(64))) unsigned int thread_stats[NUMBER_THREADS];
+__attribute__((aligned(64))) unsigned long min_num_commits;
+__attribute__((aligned(64))) unsigned long max_num_commits;
+__attribute__((aligned(64))) unsigned long avg_num_commits;
+__attribute__((aligned(64))) unsigned long long num_cycles;
+__attribute__((aligned(64))) unsigned long long thread_stats[NUMBER_THREADS];
 __attribute__((aligned(64))) tm_state_t state;
 
 __attribute__((aligned(64))) static volatile unsigned long gate_lock = 0;
@@ -127,6 +130,9 @@ typedef unsigned long tm_time_t;
 		min_num_commits = 0; \
 		max_num_commits = 0; \
 		avg_num_commits = 0; \
+		min_concurrency_window_size = 0; \
+		max_concurrency_window_size = 0; \
+		avg_concurrency_window_size = 0; \
 		num_cycles = 0; \
 		memset(thread_stats, 0, sizeof(thread_stats)); \
 	}
@@ -166,6 +172,7 @@ typedef unsigned long tm_time_t;
 	printf("==============SUMMARY STATS==================\n"); \
 	printf("DURATION: min = %u\tmax = %u\tavg = %u\n", min_cycle_duration, max_cycle_duration, avg_cycle_duration/num_cycles); \
 	printf("COMMITS: min = %u\tmax = %u\tavg = %u\n", min_num_commits, max_num_commits, avg_num_commits/num_cycles); \
+	printf("WINDOW: min = %u\tmax = %u\tavg = %.3ff\n", min_concurrency_window_size, max_concurrency_window_size, avg_concurrency_window_size/(float)num_cycles); \
 	int i; \
 	printf("===============THREAD STATS==================\n"); \
 	for (i = 0; i < NUMBER_THREADS; i++) { \
@@ -233,6 +240,7 @@ typedef unsigned long tm_time_t;
   	}
 
 # define TM_END() { \
+		assert(is_fallback); \
 		is_fallback = 0; \
 		if (!myThreadId) { \
 			current_cycle_commits++; \
@@ -303,6 +311,9 @@ typedef unsigned long tm_time_t;
 	min_cycle_duration = min(min_cycle_duration, current_cycle_duration); \
 	max_cycle_duration = max(max_cycle_duration, current_cycle_duration); \
 	avg_cycle_duration += current_cycle_duration; \
+	min_concurrency_window_size = min(min_concurrency_window_size, concurrency_window_size); \
+	max_concurrency_window_size = max(max_concurrency_window_size, concurrency_window_size); \
+	avg_concurrency_window_size += concurrency_window_size; \
 	thread_stats[concurrency_window_size - 1]++; \
 	last_cycle_timestamp = CURRENT_TIMESTAMP(); \
 	last_cycle_commits = current_cycle_commits; \
