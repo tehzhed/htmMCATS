@@ -71,6 +71,16 @@ typedef enum {
 	DECREASING
 } tm_state_t;
 
+typedef enum {
+	PROBE,
+	THROTTLE
+} tm_policy_t;
+
+typedef enum {
+	UP,
+	DOWN
+} tm_direction_t;
+
 __attribute__((aligned(64))) static volatile unsigned long begin_lock = 0;
 __attribute__((aligned(64))) unsigned int active_count;
 __attribute__((aligned(64))) unsigned int quota;
@@ -78,6 +88,11 @@ __attribute__((aligned(64))) unsigned int stalled;
 __attribute__((aligned(64))) unsigned int peak;
 __attribute__((aligned(64))) unsigned int commits;
 __attribute__((aligned(64))) unsigned int aborts;
+__attribute__((aligned(64))) unsigned int laps;
+__attribute__((aligned(64))) unsigned int last_commits;
+__attribute__((aligned(64))) unsigned int last_laps;
+__attribute__((aligned(64))) tm_direction_t direction;
+__attribute__((aligned(64))) tm_policy_t policy;
 __attribute__((aligned(64))) pthread_t * daemon_thread;
 __attribute__((aligned(64))) unsigned int num_interval;
 __attribute__((aligned(64))) unsigned int min_num_commits;
@@ -86,6 +101,9 @@ __attribute__((aligned(64))) unsigned long long avg_num_commits;
 __attribute__((aligned(64))) unsigned int min_num_aborts;
 __attribute__((aligned(64))) unsigned int max_num_aborts;
 __attribute__((aligned(64))) unsigned long long avg_num_aborts;
+__attribute__((aligned(64))) unsigned int min_num_laps;
+__attribute__((aligned(64))) unsigned int max_num_laps;
+__attribute__((aligned(64))) unsigned long long avg_num_laps;
 __attribute__((aligned(64))) unsigned int min_quota;
 __attribute__((aligned(64))) unsigned int max_quota;
 __attribute__((aligned(64))) unsigned long long avg_quota;
@@ -99,7 +117,7 @@ __attribute__((aligned(64))) unsigned long long avg_quota;
 })
 
 #define CYCLE_MILLIS 10000
-#define INTERVAL_MICROSECS 5000000
+#define INTERVAL_MICROSECS 50000
 #define WARMUP 10
 #define THRESHOLD 0.8
 
@@ -121,16 +139,66 @@ typedef unsigned long tm_time_t;
 		printf("commits -> min = %u\t max = %u\tavg = %u\n", min_num_commits, max_num_commits, avg_num_commits/num_interval); \
 		printf("aborts -> min = %u\t max = %u\tavg = %u\n", min_num_aborts, max_num_aborts, avg_num_aborts/num_interval); \
 		printf("quota -> min = %u\t max = %u\tavg = %u\n", min_quota, max_quota, avg_quota/num_interval); \
+		if (policy == PROBE) { \
+			printf("laps -> min = %u\t max = %u\tavg = %u\n", min_num_laps, max_num_laps, avg_num_laps/num_interval); \
+			printf("probe direction = %s\n", direction == UP ? "UP" : "DOWN"); \
+		} \
 		printf("==================================================\n"); \
 	}
+
+static void inline probe_policy() {
+	while (1) {
+		usleep (INTERVAL_MICROSECS);
+		if (!peak && !active_count) {
+			continue;
+		} else if (commits + aborts < WARMUP) {
+			laps++;
+			continue;
+		}
+		laps++;
+		num_interval++;
+		if (peak < quota) {
+			quota = peak + 1;
+			direction = DOWN;
+		} else if (quota == 1) {
+			direction = UP;
+		} else if ((float)commits/laps < (float)last_commits/last_laps) {
+			direction = direction == UP ? DOWN : UP;
+		}
+		if (direction == DOWN) {
+			quota--;
+		} else {
+			quota++;
+		}
+		min_num_commits = min(min_num_commits, commits);
+		max_num_commits = max(max_num_commits, commits);
+		avg_num_commits += commits;
+		min_num_aborts = min(min_num_aborts, aborts);
+		max_num_aborts = max(max_num_aborts, aborts);
+		avg_num_aborts += aborts;
+		min_quota = min(min_quota, quota);
+		max_quota = max(max_quota, quota);
+		avg_quota += quota;
+		min_num_laps = min(min_num_laps, laps);
+		max_num_laps = max(max_num_laps, laps);
+		avg_num_laps += laps;
+		PRINT_STATS();
+		last_commits = commits;
+		last_laps = laps;
+		peak = 0;
+		commits = 0;
+		aborts = 0;
+		laps = 0;
+	}
+}
 
 static void inline throttle_policy() {
 	while (1) {
 		usleep (INTERVAL_MICROSECS);
-		num_interval++;
 		if (commits < WARMUP) {
 			continue;
 		}
+		num_interval++;
 		float ratio = (float)commits/(commits + aborts);
 		if (peak < quota) {
 			quota = peak;
@@ -142,6 +210,9 @@ static void inline throttle_policy() {
 		min_num_commits = min(min_num_commits, commits);
 		max_num_commits = max(max_num_commits, commits);
 		avg_num_commits += commits;
+		min_num_aborts = min(min_num_aborts, aborts);
+		max_num_aborts = max(max_num_aborts, aborts);
+		avg_num_aborts += aborts;
 		min_quota = min(min_quota, quota);
 		max_quota = max(max_quota, quota);
 		avg_quota += quota;
@@ -153,9 +224,15 @@ static void inline throttle_policy() {
 	}
 }
 
+#  define SET_POLICY(p) { \
+	policy = p; \
+	printf("Startup: Policy has been set to %s\n", policy ? "THROTTLE" : "PROBE"); \
+}
+
 #  define TM_STARTUP(numThread, bId) { \
+		SET_POLICY(PROBE); \
 		active_count = 0; \
-		quota = 0; \
+		quota = 1; \
 		peak = 0; \
 		commits = 0; \
 		aborts = 0; \
@@ -167,7 +244,7 @@ static void inline throttle_policy() {
 		min_quota = 0; \
 		max_quota = 0; \
 		avg_quota = 0; \
-		int ret = pthread_create(&daemon_thread, NULL, &throttle_policy, NULL); \
+		int ret = pthread_create(&daemon_thread, NULL, policy ? &throttle_policy : &probe_policy, NULL); \
 		if (ret) { \
 			printf("Error: Failed to spawn daemon thread for throttle policy.\n"); \
 			exit(1); \
@@ -238,6 +315,7 @@ static void inline throttle_policy() {
     		} else { \
     			active_count++; \
     			peak = max(peak, active_count); \
+    			begin_lock = 0; \
     			break; \
     		} \
     	} \
