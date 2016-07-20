@@ -246,13 +246,16 @@ typedef unsigned long tm_time_t;
 	if (num_cycles && !(num_cycles % 100)) { \
 		PRINT_SUMMARY_STATS(); \
 	} \
-	if (IS_LOCKED(gate_lock)) { \
-        while (IS_LOCKED(gate_lock)) { \
-            __asm__ ( "pause;"); \
-        } \
- 	} \
-    while (__sync_val_compare_and_swap(&gate_lock, 0, 1) == 1) { \
-        __asm__ ("pause;"); \
+	while (1) { \
+		if (IS_LOCKED(gate_lock)) { \
+        	while (IS_LOCKED(gate_lock)) { \
+            	__asm__ ( "pause;"); \
+        	} \
+ 		} \
+    	while (__sync_val_compare_and_swap(&gate_lock, 0, 1) == 1) { \
+        	__asm__ ("pause;"); \
+    	} \
+    	break; \
     } \
     int plus_signal = current_cycle_commits < last_cycle_commits ? 0 : 1; \
 	if (plus_signal) { \
