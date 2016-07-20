@@ -288,21 +288,15 @@ static void inline throttle_policy() {
 # define AL_LOCK(idx)
 
 # define TM_BEGIN(b) { \
-		int cycles; \
-        int rand_wait = rand() * 1000; \
         while (1) { \
 			while (1) { \
 				if (IS_LOCKED(begin_lock)) { \
         			while (IS_LOCKED(begin_lock)) { \
-       	    			for (cycles = 0; cycles < rand_wait; cycles++) { \
-                			__asm__ ("pause;"); \
-                		} \
+                		__asm__ ("pause;"); \
         			} \
  				} \
     			while (__sync_val_compare_and_swap(&begin_lock, 0, 1) == 1) { \
-   	    			for (cycles = 0; cycles < rand_wait; cycles++) { \
-           	 			__asm__ ("pause;"); \
-        			} \
+           	 		__asm__ ("pause;"); \
     			} \
     			break; \
     		} \
@@ -322,15 +316,11 @@ static void inline throttle_policy() {
         while (1) { \
             if (IS_LOCKED(is_fallback)) { \
             	while (IS_LOCKED(is_fallback)) { \
-            	    for (cycles = 0; cycles < rand_wait; cycles++) { \
-                        __asm__ ("pause;"); \
-                    } \
+                    __asm__ ("pause;"); \
             	} \
             } \
             while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
-                for (cycles = 0; cycles < rand_wait; cycles++) { \
-                    __asm__ ("pause;"); \
-                } \
+                __asm__ ("pause;"); \
             } \
             break; \
         } \
