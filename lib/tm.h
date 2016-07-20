@@ -230,7 +230,7 @@ static void inline throttle_policy() {
 }
 
 #  define TM_STARTUP(numThread, bId) { \
-		SET_POLICY(PROBE); \
+		SET_POLICY(THROTTLE); \
 		active_count = 0; \
 		quota = 1; \
 		peak = 0; \
