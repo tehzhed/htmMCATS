@@ -337,6 +337,7 @@ static void inline throttle_policy() {
     }
 
 # define TM_END() { \
+		assert(is_fallback); \
 		is_fallback = 0; \
 		active_count--; \
 		commits++; \
