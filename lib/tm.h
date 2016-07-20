@@ -100,7 +100,7 @@ __attribute__((aligned(64))) static volatile unsigned long gate_lock = 0;
 	time_in_mill; \
 })
 
-#define CYCLE_MILLIS 10000
+#define CYCLE_MILLIS 10
 
 #define NUMBER_CORES sysconf(_SC_NPROCESSORS_ONLN)
 
@@ -116,10 +116,9 @@ typedef unsigned long tm_time_t;
 #  define TM_STARTUP(numThread, bId) { \
 		assert(numThread == NUMBER_THREADS); \
 		printf("startup num_threads = %lu\n", NUMBER_THREADS); \
-		fflush(stdout); \
 		concurrency_window_size = NUMBER_CORES; \
 		last_cycle_timestamp = CURRENT_TIMESTAMP(); \
-		concurrency_window_size = NUMBER_THREADS > 1 ? 2 : 1; \
+		concurrency_window_size = 1; \
 		int t_index; \
 		for (t_index = concurrency_window_size; t_index < NUMBER_THREADS; t_index++) { \
 			gated[t_index] = t_index < concurrency_window_size ? 0 : 1; \
@@ -164,7 +163,7 @@ typedef unsigned long tm_time_t;
 		printf("==================CYCLE STATS==================\n"); \
 		printf("id = %i\tstate = %i\tcurrent_cwnd = %i\n", myThreadId, state, concurrency_window_size); \
 		printf("Current Cycle Commits = %u\tLast Cycle Commits = %u\n", current_cycle_commits, last_cycle_commits); \
-		printf("Cycle duration: %lu\n", TM_CYCLE_ETA()); \
+		printf("Cycle duration: %lums\n", TM_CYCLE_ETA()); \
 		printf("===============================================\n"); \
 	}
 
@@ -193,41 +192,29 @@ typedef unsigned long tm_time_t;
 # define AL_LOCK(idx)
 
 # define TM_BEGIN(b) { \
-        int cycles; \
-        int rand_wait = rand() * 1000; \
         TM_GATE(); \
         while (1) { \
             if (IS_LOCKED(is_fallback)) { \
             	while (IS_LOCKED(is_fallback)) { \
-            	    for (cycles = 0; cycles < rand_wait; cycles++) { \
-                        __asm__ ("pause;"); \
-                    } \
+                    __asm__ ("pause;"); \
             	} \
             } \
             while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
-                for (cycles = 0; cycles < rand_wait; cycles++) { \
-                    __asm__ ("pause;"); \
-                } \
+                __asm__ ("pause;"); \
             } \
             break; \
         } \
     }
 
 #define TM_GATE() { \
-		int cycles = 0; \
-		int rand_wait = rand() * 1000; \
 		while (1) { \
 			if (IS_LOCKED(gate_lock)) { \
         		while (IS_LOCKED(gate_lock)) { \
-       	    		for (cycles = 0; cycles < rand_wait; cycles++) { \
-                		__asm__ ("pause;"); \
-                	} \
+                	__asm__ ("pause;"); \
         		} \
  			} \
     		while (__sync_val_compare_and_swap(&gate_lock, 0, 1) == 1) { \
-   	    		for (cycles = 0; cycles < rand_wait; cycles++) { \
-           	 		__asm__ ("pause;"); \
-        		} \
+           	 	__asm__ ("pause;"); \
     		} \
     		break; \
     	} \
@@ -259,18 +246,13 @@ typedef unsigned long tm_time_t;
 	if (num_cycles && !(num_cycles % 100)) { \
 		PRINT_SUMMARY_STATS(); \
 	} \
-	int cycles = 0; \
-	int rand_wait = rand() * 1000; \
 	if (IS_LOCKED(gate_lock)) { \
         while (IS_LOCKED(gate_lock)) { \
-       	    for (cycles = 0; cycles < rand_wait; cycles++) \
-                __asm__ ( "pause;"); \
+            __asm__ ( "pause;"); \
         } \
  	} \
     while (__sync_val_compare_and_swap(&gate_lock, 0, 1) == 1) { \
-   	    for (cycles = 0; cycles < rand_wait; cycles++) { \
-            __asm__ ("pause;"); \
-        } \
+        __asm__ ("pause;"); \
     } \
     int plus_signal = current_cycle_commits < last_cycle_commits ? 0 : 1; \
 	if (plus_signal) { \
