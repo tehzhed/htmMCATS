@@ -303,9 +303,7 @@ static void inline throttle_policy() {
     		if (active_count >= quota) { \
     			stalled = 1; \
     			begin_lock = 0; \
-    			for (cycles = 0; cycles < rand_wait; cycles++) { \
-        	   	 	__asm__ ("pause;"); \
-        		} \
+        	   	__asm__ ("pause;"); \
     		} else { \
     			active_count++; \
     			peak = max(peak, active_count); \
