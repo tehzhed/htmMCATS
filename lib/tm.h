@@ -75,6 +75,7 @@ __attribute__((aligned(64))) unsigned int concurrency_window_size;
 __attribute__((aligned(64))) unsigned int min_concurrency_window_size;
 __attribute__((aligned(64))) unsigned int max_concurrency_window_size;
 __attribute__((aligned(64))) unsigned long long avg_concurrency_window_size;
+__attribute__((aligned(64))) unsigned long startup_timestamp;
 __attribute__((aligned(64))) unsigned long last_cycle_timestamp;
 __attribute__((aligned(64))) unsigned int last_cycle_commits;
 __attribute__((aligned(64))) unsigned int current_cycle_commits;
@@ -117,7 +118,8 @@ typedef unsigned long tm_time_t;
 		assert(numThread == NUMBER_THREADS); \
 		printf("startup num_threads = %lu\n", NUMBER_THREADS); \
 		concurrency_window_size = NUMBER_CORES; \
-		last_cycle_timestamp = CURRENT_TIMESTAMP(); \
+		startup_timestamp = CURRENT_TIMESTAMP(); \
+		last_cycle_timestamp = startup_timestamp; \
 		concurrency_window_size = 1; \
 		int t_index; \
 		for (t_index = concurrency_window_size; t_index < NUMBER_THREADS; t_index++) { \
@@ -163,7 +165,8 @@ typedef unsigned long tm_time_t;
 		printf("==================CYCLE STATS==================\n"); \
 		printf("id = %i\tstate = %i\tcurrent_cwnd = %i\n", myThreadId, state, concurrency_window_size); \
 		printf("Current Cycle Commits = %u\tLast Cycle Commits = %u\n", current_cycle_commits, last_cycle_commits); \
-		printf("Cycle duration: %lums\n", TM_CYCLE_ETA()); \
+		printf("Cycle duration = %lums\tOverall duration = %lums\n", TM_CYCLE_ETA(), TM_OVERALL_ETA()); \
+		printf("Chart_data\t%u\t%i\t%lu\n", current_cycle_commits, concurrency_window_size, TM_OVERALL_ETA()); \
 		printf("===============================================\n"); \
 	}
 
@@ -236,6 +239,10 @@ typedef unsigned long tm_time_t;
 			} \
 		} \
     }
+
+# define TM_OVERALL_ETA() ({ \
+    CURRENT_TIMESTAMP() - startup_timestamp; \
+})
 
 # define TM_CYCLE_ETA() ({ \
     CURRENT_TIMESTAMP() - last_cycle_timestamp; \
