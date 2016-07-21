@@ -107,6 +107,7 @@ __attribute__((aligned(64))) unsigned long long avg_num_laps;
 __attribute__((aligned(64))) unsigned int min_quota;
 __attribute__((aligned(64))) unsigned int max_quota;
 __attribute__((aligned(64))) unsigned long long avg_quota;
+__attribute__((aligned(64))) unsigned long startup_timestamp;
 
 
 #define CURRENT_TIMESTAMP() ({ \
@@ -114,6 +115,10 @@ __attribute__((aligned(64))) unsigned long long avg_quota;
 	gettimeofday(&tv, NULL); \
 	unsigned long time_in_mill = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ; \         	
 	time_in_mill; \
+})
+
+#define TM_OVERALL_ETA() ({ \
+	CURRENT_TIMESTAMP() - startup_timestamp; \
 })
 
 #define CYCLE_MILLIS 10000
@@ -134,8 +139,8 @@ typedef unsigned long tm_time_t;
 
 #  define PRINT_STATS() { \
 		printf("==================INTERVAL STATS==================\n"); \
-		printf("interval = %u\tquota = %u\tstalled = %i\n", num_interval, quota, stalled); \
-		printf("peak = %u\tcommits = %u\tactive count = %u\n", peak, commits, active_count); \
+		printf("interval = %u\tquota = %u\tstalled = %i\tETA = %lu\n", num_interval, quota, stalled, TM_OVERALL_ETA()); \
+		printf("peak = %u\tcommits = %u\tactive count = %u\tthreads = %i\n", peak, commits, active_count, NUMBER_THREADS); \
 		printf("commits -> min = %u\t max = %u\tavg = %u\n", min_num_commits, max_num_commits, avg_num_commits/num_interval); \
 		printf("aborts -> min = %u\t max = %u\tavg = %u\n", min_num_aborts, max_num_aborts, avg_num_aborts/num_interval); \
 		printf("quota -> min = %u\t max = %u\tavg = %u\n", min_quota, max_quota, avg_quota/num_interval); \
@@ -143,6 +148,7 @@ typedef unsigned long tm_time_t;
 			printf("laps -> min = %u\t max = %u\tavg = %u\n", min_num_laps, max_num_laps, avg_num_laps/num_interval); \
 			printf("probe direction = %s\n", direction == UP ? "UP" : "DOWN"); \
 		} \
+		printf("Chart_data\t%u\t%u\t%lu\t%i\n", commits, active_count, TM_OVERALL_ETA(), NUMBER_THREADS); \
 		printf("==================================================\n"); \
 	}
 
@@ -230,6 +236,7 @@ static void inline throttle_policy() {
 }
 
 #  define TM_STARTUP(numThread, bId) { \
+		assert(numThread == NUMBER_THREADS); \
 		SET_POLICY(THROTTLE); \
 		active_count = 0; \
 		quota = 1; \
