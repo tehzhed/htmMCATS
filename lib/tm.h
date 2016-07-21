@@ -163,10 +163,10 @@ typedef unsigned long tm_time_t;
 
 #  define PRINT_STATS() { \
 		printf("==================CYCLE STATS==================\n"); \
-		printf("id = %i\tstate = %i\tcurrent_cwnd = %i\n", myThreadId, state, concurrency_window_size); \
+		printf("id = %i\tstate = %i\tcurrent_cwnd = %u\tthreads = %i\n", myThreadId, state, concurrency_window_size, NUMBER_THREADS); \
 		printf("Current Cycle Commits = %u\tLast Cycle Commits = %u\n", current_cycle_commits, last_cycle_commits); \
 		printf("Cycle duration = %lums\tOverall duration = %lums\n", TM_CYCLE_ETA(), TM_OVERALL_ETA()); \
-		printf("Chart_data\t%u\t%i\t%lu\n", current_cycle_commits, concurrency_window_size, TM_OVERALL_ETA()); \
+		printf("Chart_data\t%u\t%u\t%lu\t%i\n", current_cycle_commits, concurrency_window_size, TM_OVERALL_ETA(), NUMBER_THREADS); \
 		printf("===============================================\n"); \
 	}
 
