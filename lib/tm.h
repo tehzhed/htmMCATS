@@ -71,6 +71,11 @@ typedef enum {
 	DECREASING
 } tm_state_t;
 
+typedef enum {
+	LOCK_ONLY,
+	F2C2
+} tm_mode_t;
+
 __attribute__((aligned(64))) unsigned int concurrency_window_size;
 __attribute__((aligned(64))) unsigned int min_concurrency_window_size;
 __attribute__((aligned(64))) unsigned int max_concurrency_window_size;
@@ -90,6 +95,7 @@ __attribute__((aligned(64))) unsigned long avg_num_commits;
 __attribute__((aligned(64))) unsigned long long num_cycles;
 __attribute__((aligned(64))) unsigned long long thread_stats[NUMBER_THREADS];
 __attribute__((aligned(64))) tm_state_t state;
+__attribute__((aligned(64))) tm_mode_t mode;
 
 __attribute__((aligned(64))) static volatile unsigned long gate_lock = 0;
 
@@ -101,7 +107,7 @@ __attribute__((aligned(64))) static volatile unsigned long gate_lock = 0;
 	time_in_mill; \
 })
 
-#define CYCLE_MILLIS 10
+#define CYCLE_MILLIS 80
 
 #define NUMBER_CORES sysconf(_SC_NPROCESSORS_ONLN)
 
@@ -116,6 +122,7 @@ typedef unsigned long tm_time_t;
 
 #  define TM_STARTUP(numThread, bId) { \
 		assert(numThread == NUMBER_THREADS); \
+		mode = F2C2; \
 		printf("startup num_threads = %lu\n", NUMBER_THREADS); \
 		concurrency_window_size = NUMBER_CORES; \
 		startup_timestamp = CURRENT_TIMESTAMP(); \
@@ -166,7 +173,7 @@ typedef unsigned long tm_time_t;
 		printf("id = %i\tstate = %i\tcurrent_cwnd = %u\tthreads = %i\n", myThreadId, state, concurrency_window_size, NUMBER_THREADS); \
 		printf("Current Cycle Commits = %u\tLast Cycle Commits = %u\n", current_cycle_commits, last_cycle_commits); \
 		printf("Cycle duration = %lums\tOverall duration = %lums\n", TM_CYCLE_ETA(), TM_OVERALL_ETA()); \
-		printf("Chart_data\t%u\t%u\t%lu\t%i\n", current_cycle_commits, concurrency_window_size, TM_OVERALL_ETA(), NUMBER_THREADS); \
+		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\n", current_cycle_commits, concurrency_window_size, TM_OVERALL_ETA(), NUMBER_THREADS, mode == F2C2 ? "F2C2" : "LockOnly"); \
 		printf("===============================================\n"); \
 	}
 
@@ -235,7 +242,12 @@ typedef unsigned long tm_time_t;
 		if (!myThreadId) { \
 			current_cycle_commits++; \
 			if (TM_CYCLE_ETA() >= CYCLE_MILLIS) { \
-				TM_NEW_CWND(); \
+				if(mode == F2C2) { \
+					TM_NEW_CWND(); \
+				} else { \
+					PRINT_STATS(); \
+					REFRESH_STATS(); \
+				} \
 			} \
 		} \
     }
@@ -295,6 +307,10 @@ typedef unsigned long tm_time_t;
 		} \
 	} \
 	gate_lock = 0; \
+	REFRESH_STATS(); \
+}
+
+# define REFRESH_STATS() { \
 	num_cycles++; \
 	min_num_commits = min(min_num_commits, current_cycle_commits); \
 	max_num_commits = max(max_num_commits, current_cycle_commits); \

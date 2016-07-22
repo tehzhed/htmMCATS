@@ -55,11 +55,11 @@ wait_until_finish() {
     kill -9 $pid3
 }
 
-for b in {1..8}
+for b in {2..6..4}
 do
     cd $workspace
-    echo "${bStr[$b]}" >> auto-results/results.txt
-    for t in {1..8}
+    # echo "${bStr[$b]}" >> auto-results/results.txt
+    for t in {2..4..2}
     do
         cd $workspace;
         bash build.sh 5 1 $t ${blocks[$b]} 1000;
@@ -68,11 +68,11 @@ do
             cd $workspace;
             cd ${benchmarks[$b]};
             echo "${bStr[$b]} | threads $t | attempt $a"
-            ./${benchmarks[$b]} ${params[$b]}$t >> ../auto-results/results.txt &
+            ./${benchmarks[$b]} ${params[$b]}$t >> ../auto-results/results_${benchmarks[$b]}_$t.txt &
             pid3=$!; wait_until_finish $pid3; wait $pid3; rc=$?
-            if [[ $rc != 0 ]] ; then
-                echo "Error within: ${bStr[$b]} | threads $t | attempt $a" >> ../auto-results/error.out
-            fi
+            # if [[ $rc != 0 ]] ; then
+            #     echo "Error within: ${bStr[$b]} | threads $t | attempt $a" >> ../auto-results/error.out
+            # fi
        done
     done
 done
