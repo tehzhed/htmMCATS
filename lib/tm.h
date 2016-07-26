@@ -330,8 +330,10 @@ typedef unsigned long tm_time_t;
             int status = _xbegin(); \
             if (status == _XBEGIN_STARTED) { break; } \
             tries[myThreadId]--; \
-            aborts++; \
-            if (tries <= 0) { \
+            if (!myThreadId) { \
+            	aborts++; \
+            } \
+            if (tries[myThreadId] <= 0) { \
             	if (!myThreadId) { \
             		current_cycle_locks++; \
             	} \
