@@ -130,7 +130,7 @@ __attribute__((aligned(64))) unsigned int tries[NUMBER_THREADS];
     CURRENT_TIMESTAMP() - last_cycle_timestamp; \
 })
 
-#define CYCLE_MILLIS 10
+#define CYCLE_MILLIS 50
 #define INTERVAL_MICROSECS 50000
 #define WARMUP 10
 #define THRESHOLD 0.8
