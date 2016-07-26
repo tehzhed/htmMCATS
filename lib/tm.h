@@ -113,6 +113,11 @@ __attribute__((aligned(64))) static volatile unsigned long gate_lock = 0;
 
 #define NUMBER_CORES sysconf(_SC_NPROCESSORS_ONLN)
 
+#define SET_MODE(m) { \
+	mode = m; \
+	printf("Mode set to %s", mode == LOCK_ONLY ? "LOCK_ONLY" : "F2C2"); \
+}
+
 typedef unsigned long tm_time_t;
 
 #define TM_TIMER_READ() ({ \
@@ -124,7 +129,7 @@ typedef unsigned long tm_time_t;
 
 #  define TM_STARTUP(numThread, bId) { \
 		assert(numThread == NUMBER_THREADS); \
-		mode = F2C2; \
+		SET_MODE(F2C2); \
 		printf("startup num_threads = %lu\n", NUMBER_THREADS); \
 		concurrency_window_size = NUMBER_CORES; \
 		startup_timestamp = CURRENT_TIMESTAMP(); \
@@ -179,7 +184,7 @@ typedef unsigned long tm_time_t;
 		printf("id = %i\tstate = %i\tcurrent_cwnd = %u\tthreads = %i\taborts = %lu\tlocks = %lu\n", myThreadId, state, concurrency_window_size, NUMBER_THREADS, aborts, current_cycle_locks); \
 		printf("Current Cycle Commits = %u\tLast Cycle Commits = %u\n", current_cycle_commits, last_cycle_commits); \
 		printf("Cycle duration = %lums\tOverall duration = %lums\n", TM_CYCLE_ETA(), TM_OVERALL_ETA()); \
-		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\t%lu\t%lu\n", current_cycle_commits, concurrency_window_size, TM_OVERALL_ETA(), NUMBER_THREADS, mode == F2C2 ? "F2C2" : "LockOnly", aborts, current_cycle_locks); \
+		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\t%lu\t%lu\n", current_cycle_commits, concurrency_window_size, TM_OVERALL_ETA(), NUMBER_THREADS, mode == F2C2 ? "F2C2" : "LOCK_ONLY", aborts, current_cycle_locks); \
 		printf("===============================================\n"); \
 	}
 
@@ -208,7 +213,9 @@ typedef unsigned long tm_time_t;
 # define AL_LOCK(idx)
 
 # define TM_BEGIN(b) { \
-        TM_GATE(); \
+		if (mode == F2C2) { \
+        	TM_GATE(); \
+        } \
         tries[myThreadId] = max_attempts; \
         while (1) { \
             if (IS_LOCKED(is_fallback)) { \
