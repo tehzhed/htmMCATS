@@ -115,7 +115,7 @@ __attribute__((aligned(64))) static volatile unsigned long gate_lock = 0;
 
 #define SET_MODE(m) { \
 	mode = m; \
-	printf("Mode set to %s", mode == LOCK_ONLY ? "LOCK_ONLY" : "F2C2"); \
+	printf("Mode set to %s\n", mode == LOCK_ONLY ? "LOCK_ONLY" : "F2C2"); \
 }
 
 typedef unsigned long tm_time_t;
