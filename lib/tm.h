@@ -109,7 +109,7 @@ __attribute__((aligned(64))) static volatile unsigned long gate_lock = 0;
 	time_in_mill; \
 })
 
-#define CYCLE_MILLIS 80
+#define CYCLE_MILLIS 10
 
 #define NUMBER_CORES sysconf(_SC_NPROCESSORS_ONLN)
 
