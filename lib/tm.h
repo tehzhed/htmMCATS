@@ -269,7 +269,6 @@ typedef unsigned long tm_time_t;
 
 # define TM_NEW_CWND() { \
 	PRINT_STATS(); \
-	PRINT_SUMMARY_STATS(); \
     int plus_signal = current_cycle_commits < last_cycle_commits ? 0 : 1; \
 	if (plus_signal) { \
 		if (state == INCREASING) { \
