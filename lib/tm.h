@@ -92,10 +92,14 @@ __attribute__((aligned(64))) unsigned long  avg_cycle_duration;
 __attribute__((aligned(64))) unsigned long min_num_commits;
 __attribute__((aligned(64))) unsigned long max_num_commits;
 __attribute__((aligned(64))) unsigned long avg_num_commits;
+__attribute__((aligned(64))) unsigned int aborts;
 __attribute__((aligned(64))) unsigned long long num_cycles;
 __attribute__((aligned(64))) unsigned long long thread_stats[NUMBER_THREADS];
 __attribute__((aligned(64))) tm_state_t state;
 __attribute__((aligned(64))) tm_mode_t mode;
+__attribute__((aligned(64))) unsigned int max_attempts;
+__attribute__((aligned(64))) unsigned int tries[NUMBER_THREADS];
+__attribute__((aligned(64))) unsigned int current_cycle_locks;
 
 __attribute__((aligned(64))) static volatile unsigned long gate_lock = 0;
 
@@ -138,11 +142,15 @@ typedef unsigned long tm_time_t;
 		min_num_commits = 0; \
 		max_num_commits = 0; \
 		avg_num_commits = 0; \
+		aborts = 0; \
 		min_concurrency_window_size = 0; \
 		max_concurrency_window_size = 0; \
 		avg_concurrency_window_size = 0; \
 		num_cycles = 0; \
+		max_attempts = TOTAL_ATTEMPTS; \
+		current_cycle_locks = 0; \
 		memset(thread_stats, 0, sizeof(thread_stats)); \
+		memset(tries, 0, sizeof(tries)); \
 	}
 
 #  define TM_SHUTDOWN() { \
@@ -170,10 +178,10 @@ typedef unsigned long tm_time_t;
 
 #  define PRINT_STATS() { \
 		printf("==================CYCLE STATS==================\n"); \
-		printf("id = %i\tstate = %i\tcurrent_cwnd = %u\tthreads = %i\n", myThreadId, state, concurrency_window_size, NUMBER_THREADS); \
+		printf("id = %i\tstate = %i\tcurrent_cwnd = %u\tthreads = %i\tlocks = %lu\n", myThreadId, state, concurrency_window_size, NUMBER_THREADS, current_cycle_locks); \
 		printf("Current Cycle Commits = %u\tLast Cycle Commits = %u\n", current_cycle_commits, last_cycle_commits); \
 		printf("Cycle duration = %lums\tOverall duration = %lums\n", TM_CYCLE_ETA(), TM_OVERALL_ETA()); \
-		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\n", current_cycle_commits, concurrency_window_size, TM_OVERALL_ETA(), NUMBER_THREADS, mode == F2C2 ? "F2C2" : "LockOnly"); \
+		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\t%lu\t%lu\n", current_cycle_commits, concurrency_window_size, TM_OVERALL_ETA(), NUMBER_THREADS, mode == F2C2 ? "F2C2" : "LockOnly", aborts, current_cycle_locks); \
 		printf("===============================================\n"); \
 	}
 
@@ -181,7 +189,7 @@ typedef unsigned long tm_time_t;
 	printf("==============SUMMARY STATS==================\n"); \
 	printf("DURATION: min = %u\tmax = %u\tavg = %u\n", min_cycle_duration, max_cycle_duration, avg_cycle_duration/num_cycles); \
 	printf("COMMITS: min = %u\tmax = %u\tavg = %u\n", min_num_commits, max_num_commits, avg_num_commits/num_cycles); \
-	printf("WINDOW: min = %u\tmax = %u\tavg = %.3ff\n", min_concurrency_window_size, max_concurrency_window_size, avg_concurrency_window_size/(float)num_cycles); \
+	printf("WINDOW: min = %u\tmax = %u\tavg = %.3f\n", min_concurrency_window_size, max_concurrency_window_size, avg_concurrency_window_size/(float)num_cycles); \
 	int i; \
 	printf("===============THREAD STATS==================\n"); \
 	for (i = 0; i < NUMBER_THREADS; i++) { \
@@ -203,16 +211,27 @@ typedef unsigned long tm_time_t;
 
 # define TM_BEGIN(b) { \
         TM_GATE(); \
+        tries[myThreadId] = max_attempts; \
         while (1) { \
             if (IS_LOCKED(is_fallback)) { \
-            	while (IS_LOCKED(is_fallback)) { \
-                    __asm__ ("pause;"); \
+                while (IS_LOCKED(is_fallback)) { \
+                    __asm__ ( "pause;"); \
+                } \
+            } \
+            int status = _xbegin(); \
+            tries[myThreadId]--; \
+            if (!myThreadId) { \
+            	aborts++; \
+            } \
+            if (tries[myThreadId] <= 0) { \
+            	if (!myThreadId) { \
+            		current_cycle_locks++; \
             	} \
+                while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
+                    __asm__ ("pause;"); \
+                } \
+                break; \
             } \
-            while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
-                __asm__ ("pause;"); \
-            } \
-            break; \
         } \
     }
 
@@ -223,8 +242,12 @@ typedef unsigned long tm_time_t;
   	}
 
 # define TM_END() { \
-		assert(is_fallback); \
-		is_fallback = 0; \
+		if (tries[myThreadId] > 0) { \
+        	if (IS_LOCKED(is_fallback)) { if (!myThreadId) { aborts++; } _xabort(30); } \
+			_xend(); \
+    	} else {    \
+        	is_fallback = 0; \
+    	} \
 		if (!myThreadId) { \
 			current_cycle_commits++; \
 			if (TM_CYCLE_ETA() >= CYCLE_MILLIS) { \
@@ -248,9 +271,7 @@ typedef unsigned long tm_time_t;
 
 # define TM_NEW_CWND() { \
 	PRINT_STATS(); \
-	if (num_cycles && !(num_cycles % 100)) { \
-		PRINT_SUMMARY_STATS(); \
-	} \
+	PRINT_SUMMARY_STATS(); \
     int plus_signal = current_cycle_commits < last_cycle_commits ? 0 : 1; \
 	if (plus_signal) { \
 		if (state == INCREASING) { \
@@ -300,12 +321,13 @@ typedef unsigned long tm_time_t;
 	last_cycle_timestamp = CURRENT_TIMESTAMP(); \
 	last_cycle_commits = current_cycle_commits; \
 	current_cycle_commits = 0; \
+	current_cycle_locks = 0; \
 }
 
 
 
 #  define TM_BEGIN_RO()                 TM_BEGIN(0)
-#  define TM_RESTART()                  _xabort(0xab);
+#  define TM_RESTART()                  { if (!myThreadId) { aborts++; } _xabort(0xab); }
 #  define TM_EARLY_RELEASE(var)
 
 #  define TM_SHARED_READ(var)         (var)
