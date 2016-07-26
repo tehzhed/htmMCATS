@@ -22,7 +22,7 @@ endif
 CFLAGS   += -w $(TOTAL_ATTEMPTS) $(APRIORI_LOCK_ATTEMPTS) $(NUMBER_THREADS) $(NUMBER_ATOMIC_BLOCKS) $(TXS_PER_TUNING_CYCLE)
 
 CPPFLAGS := $(CFLAGS)
-LIBS     += -lrt -lpthread -mrtm -lgsl -lm  -lgslcblas -lm
+LIBS     += -lrt -lpthread -mrtm
 
 
 .PHONY: default
