@@ -5,7 +5,7 @@ import glob
 
 folder = '../charts/'
 
-filenames = glob.iglob(argv[1] + "/results_*.txt")
+filenames = glob.iglob("auto-results/results_*.txt")
 
 for filename in filenames:
 
