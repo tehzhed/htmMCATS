@@ -178,7 +178,7 @@ typedef unsigned long tm_time_t;
 
 #  define PRINT_STATS() { \
 		printf("==================CYCLE STATS==================\n"); \
-		printf("id = %i\tstate = %i\tcurrent_cwnd = %u\tthreads = %i\tlocks = %lu\n", myThreadId, state, concurrency_window_size, NUMBER_THREADS, current_cycle_locks); \
+		printf("id = %i\tstate = %i\tcurrent_cwnd = %u\tthreads = %i\taborts = %lu\tlocks = %lu\n", myThreadId, state, concurrency_window_size, NUMBER_THREADS, aborts, current_cycle_locks); \
 		printf("Current Cycle Commits = %u\tLast Cycle Commits = %u\n", current_cycle_commits, last_cycle_commits); \
 		printf("Cycle duration = %lums\tOverall duration = %lums\n", TM_CYCLE_ETA(), TM_OVERALL_ETA()); \
 		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\t%lu\t%lu\n", current_cycle_commits, concurrency_window_size, TM_OVERALL_ETA(), NUMBER_THREADS, mode == F2C2 ? "F2C2" : "LockOnly", aborts, current_cycle_locks); \
