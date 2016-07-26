@@ -2,8 +2,6 @@
 #ifndef TM_H
 #define TM_H 1
 
-#  include <gsl/gsl_linalg.h>
-
 
 #  define MAIN(argc, argv)              int main (int argc, char** argv)
 #  define MAIN_RETURN(val)              return val
