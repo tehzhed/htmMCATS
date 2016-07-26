@@ -59,7 +59,7 @@ for b in {2..6..4}
 do
     cd $workspace
     # echo "${bStr[$b]}" >> auto-results/results.txt
-    for t in {2..4..2}
+    for t in {2..8}
     do
         cd $workspace;
         bash build.sh 5 1 $t ${blocks[$b]} 1000;
