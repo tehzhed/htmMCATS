@@ -319,6 +319,7 @@ typedef unsigned long tm_time_t;
 	last_cycle_commits = current_cycle_commits; \
 	current_cycle_commits = 0; \
 	current_cycle_locks = 0; \
+	aborts = 0; \
 }
 
 
