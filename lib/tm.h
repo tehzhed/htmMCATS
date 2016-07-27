@@ -309,7 +309,7 @@ typedef unsigned long tm_time_t;
 # define TM_BEGIN(b) { \
 		int active_txs; \
 		while(1) { \
-			if (!myThreaId) printf("e"); \
+			if (!myThreadId) printf("e"); \
 			active_txs=active_count; \
 			if(active_txs<quota || !myThreadId) { \
 				if (__sync_bool_compare_and_swap(&active_count, active_txs, active_txs+1)) { \
@@ -323,10 +323,10 @@ typedef unsigned long tm_time_t;
 		} \
 		tries[myThreadId] = max_attempts; \
 		while (1) { \
-			if (!myThreaId) printf("d"); \
+			if (!myThreadId) printf("d"); \
             if (IS_LOCKED(is_fallback)) { \
                 while (IS_LOCKED(is_fallback)) { \
-                	if (!myThreaId) printf("c"); \
+                	if (!myThreadId) printf("c"); \
                     __asm__ ( "pause;"); \
                 } \
             } \
@@ -341,7 +341,7 @@ typedef unsigned long tm_time_t;
             		current_cycle_locks++; \
             	} \
             	while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
-            		if (!myThreaId) printf("b"); \
+            		if (!myThreadId) printf("b"); \
                     __asm__ ("pause;"); \
                 } \
                 break; \
@@ -358,7 +358,7 @@ typedef unsigned long tm_time_t;
     	} \
     	int active_txs; \
     	while (1) { \
-    		if (!myThreaId) printf("a"); \
+    		if (!myThreadId) printf("a"); \
     		active_txs = active_count; \
     		if (__sync_bool_compare_and_swap(&active_count, active_txs, active_txs - 1)) { \
     			break; \
