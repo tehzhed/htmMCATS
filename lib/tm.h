@@ -309,7 +309,6 @@ typedef unsigned long tm_time_t;
 # define TM_BEGIN(b) { \
 		int active_txs; \
 		while(1) { \
-			if (!myThreadId) printf("e\n"); \
 			active_txs=active_count; \
 			if(active_txs<quota) { \
 				if (__sync_bool_compare_and_swap(&active_count, active_txs, active_txs+1)) { \
