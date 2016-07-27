@@ -160,7 +160,6 @@ typedef unsigned long tm_time_t;
 		} \
 		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\t%lu\t%lu\n", commits, active_count, TM_OVERALL_ETA(), NUMBER_THREADS, policy == PROBE ? "PROBE" : "THROTTLE", aborts, current_cycle_locks); \
 		printf("==================================================\n"); \
-		fflush(stdout); \
 	}
 
 #  define PROBE_POLICY() { \
