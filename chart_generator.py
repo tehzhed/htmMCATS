@@ -1,6 +1,5 @@
 from sys import argv
 import matplotlib.pyplot as plt
-import matplotlib.pylab as pylab
 import glob
 
 folder = '../charts/'
@@ -27,7 +26,7 @@ for filename in filenames:
             if line.startswith('Chart_data'):
             
                 split_line = line.split('\t')
-            
+
                 commits = split_line[1]
                 window = split_line[2]
                 timestamp = split_line[3]
@@ -52,12 +51,14 @@ for filename in filenames:
 
     plt.legend(loc='upper left', fontsize='small')
 
+    fig  = plt.gcf()
+
     plt.show()
 
-    pylab.savefig(folder+'commits_'+program+'_'+mode+'_'+threads+'.png')
-    pylab.savefig(folder+'commits_'+program+'_'+mode+'_'+threads+'.pdf')
+    fig.savefig(folder+'commits_'+program+'_'+mode+'_'+threads+'.png')
+    # pylab.savefig(folder+'commits_'+program+'_'+mode+'_'+threads+'.pdf')
 
-
+    plt.close()
 
     plt.xlabel('Millis since TM_STARTUP')
     plt.ylabel('Window size per cycle')
@@ -66,12 +67,14 @@ for filename in filenames:
 
     plt.legend(loc='upper left', fontsize='small')
 
+    fig = plt.gcf()
+
     plt.show()
 
-    pylab.savefig(folder+'window_'+program+'_'+mode+'_'+threads+'.png')
-    pylab.savefig(folder+'window_'+program+'_'+mode+'_'+threads+'.pdf')
+    fig.savefig(folder+'window_'+program+'_'+mode+'_'+threads+'.png')
+    # pylab.savefig(folder+'window_'+program+'_'+mode+'_'+threads+'.pdf')
 
-
+    plt.close()
 
     plt.xlabel('ETA since TM_STARTUP')
     plt.ylabel('Aborts per cycle')
@@ -80,12 +83,14 @@ for filename in filenames:
 
     plt.legend(loc='upper left', fontsize='small')
 
+    fig = plt.gcf()
+
     plt.show()
 
-    pylab.savefig(folder+'aborts_'+program+'_'+mode+'_'+threads+'.png')
-    pylab.savefig(folder+'aborts_'+program+'_'+mode+'_'+threads+'.pdf')
+    fig.savefig(folder+'aborts_'+program+'_'+mode+'_'+threads+'.png')
+    # pylab.savefig(folder+'aborts_'+program+'_'+mode+'_'+threads+'.pdf')
 
-
+    plt.close()
 
     plt.xlabel('ETA since TM_STARTUP')
     plt.ylabel('Locks per cycle')
@@ -94,7 +99,11 @@ for filename in filenames:
 
     plt.legend(loc='upper left', fontsize='small')
 
+    fig = plt.gcf()
+
     plt.show()
 
-    pylab.savefig(folder+'locks_'+program+'_'+mode+'_'+threads+'.png')
-    pylab.savefig(folder+'locks_'+program+'_'+mode+'_'+threads+'.pdf')
+    fig.savefig(folder+'locks_'+program+'_'+mode+'_'+threads+'.png')
+    # pylab.savefig(folder+'locks_'+program+'_'+mode+'_'+threads+'.pdf')
+
+    plt.close()
