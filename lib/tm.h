@@ -307,20 +307,18 @@ typedef unsigned long tm_time_t;
 # define AL_LOCK(idx)
 
 # define TM_BEGIN(b) { \
-		if (myThreadId) { \
-			int active_txs; \
-			while(1) { \
-				active_txs=active_count; \
-				if(active_txs<quota) { \
-					if (__sync_bool_compare_and_swap(&active_count, active_txs, active_txs+1)) { \
-						peak = max(peak, active_count); \
-						break; \
-					} \
-				} else { \
-					stalled = 1; \
+		int active_txs; \
+		while(1) { \
+			active_txs=active_count; \
+			if(active_txs<quota || !myThreadId) { \
+				if (__sync_bool_compare_and_swap(&active_count, active_txs, active_txs+1)) { \
+					peak = max(peak, active_count); \
+					break; \
 				} \
-				__asm__ ("pause;"); \
+			} else { \
+				stalled = 1; \
 			} \
+			__asm__ ("pause;"); \
 		} \
 		tries[myThreadId] = max_attempts; \
 		while (1) { \
