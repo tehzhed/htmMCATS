@@ -352,8 +352,15 @@ typedef unsigned long tm_time_t;
     	} else {    \
         	is_fallback = 0; \
     	} \
+    	while (1) { \
+    		int aux_count = active_count; \
+    		if (__sync_bool_compare_and_swap(&active_count, aux_count, aux_count + 1)) { \
+    			break; \
+            } else { \
+				__asm__ ("pause;"); \
+            } \
+        } \
 		if (!myThreadId) { \
-			active_count--; \
 			commits++; \
 			if (TM_CYCLE_ETA() >= CYCLE_MILLIS) { \
 				if(policy == PROBE) { \
