@@ -354,7 +354,7 @@ typedef unsigned long tm_time_t;
     	} \
     	while (1) { \
     		int aux_count = active_count; \
-    		if (__sync_bool_compare_and_swap(&active_count, aux_count, aux_count + 1)) { \
+    		if (__sync_bool_compare_and_swap(&active_count, aux_count, aux_count - 1)) { \
     			break; \
             } else { \
 				__asm__ ("pause;"); \
