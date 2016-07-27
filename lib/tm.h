@@ -148,7 +148,7 @@ typedef unsigned long tm_time_t;
 
 #  define PRINT_STATS() { \
 		printf("==================INTERVAL STATS==================\n"); \
-		printf("interval = %u\tquota = %u\tstalled = %i\tETA = %lu\n", num_interval, quota, stalled, TM_OVERALL_ETA()); \
+		printf("id = %i\tinterval = %u\tquota = %u\tstalled = %i\tETA = %lu\n", myThreadId, num_interval, quota, stalled, TM_OVERALL_ETA()); \
 		printf("peak = %u\tcommits = %u\tactive count = %u\tthreads = %i\taborts = %lu\tlocks = %lu\n", peak, commits, active_count, NUMBER_THREADS, aborts, current_cycle_locks); \
 		printf("commits -> min = %u\t max = %u\tavg = %u\n", min_num_commits, max_num_commits, avg_num_commits/num_interval); \
 		printf("aborts -> min = %u\t max = %u\tavg = %u\n", min_num_aborts, max_num_aborts, avg_num_aborts/num_interval); \
