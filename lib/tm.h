@@ -310,7 +310,7 @@ typedef unsigned long tm_time_t;
 		int active_txs; \
 		while(1) { \
 			active_txs=active_count; \
-			if(active_txs<quota) { \
+			if(active_txs<quota || !myThreadId) { \
 				if (__sync_bool_compare_and_swap(&active_count, active_txs, active_txs+1)) { \
 					peak = max(peak, active_count); \
 					break; \
