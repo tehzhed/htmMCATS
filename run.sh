@@ -58,7 +58,7 @@ wait_until_finish() {
 for b in {2..6..4}
 do
     cd $workspace
-    echo "${bStr[$b]}" >> auto-results/results.txt
+    # echo "${bStr[$b]}" >> auto-results/results.txt
     for t in {2..8}
     do
         cd $workspace;
@@ -68,11 +68,11 @@ do
             cd $workspace;
             cd ${benchmarks[$b]};
             echo "${bStr[$b]} | threads $t | attempt $a"
-            ./${benchmarks[$b]} ${params[$b]}$t >> ../auto-results/results.txt &
+            ./${benchmarks[$b]} ${params[$b]}$t >> ../auto-results/results_${benchmarks[$b]}_$t.txt &
             pid3=$!; wait_until_finish $pid3; wait $pid3; rc=$?
-            if [[ $rc != 0 ]] ; then
-                echo "Error within: ${bStr[$b]} | threads $t | attempt $a" >> ../auto-results/error.out
-            fi
+            # if [[ $rc != 0 ]] ; then
+            #     echo "Error within: ${bStr[$b]} | threads $t | attempt $a" >> ../auto-results/error.out
+            # fi
        done
     done
 done
