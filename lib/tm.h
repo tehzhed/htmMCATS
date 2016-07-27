@@ -113,6 +113,7 @@ __attribute__((aligned(64))) unsigned long avg_duration;
 __attribute__((aligned(64))) unsigned int max_attempts;
 __attribute__((aligned(64))) unsigned int current_cycle_locks;
 __attribute__((aligned(64))) unsigned int tries[NUMBER_THREADS];
+__attribute__((aligned(64))) unsigned int updating_stats;
 
 
 #define CURRENT_TIMESTAMP() ({ \
@@ -272,6 +273,7 @@ typedef unsigned long tm_time_t;
 		avg_duration = 0; \
 		current_cycle_locks = 0; \
 		last_cycle_timestamp = CURRENT_TIMESTAMP(); \
+		updating_stats = 0; \
 		memset(tries, 0, sizeof(tries)); \
 	}
 
@@ -352,23 +354,33 @@ typedef unsigned long tm_time_t;
     	} else {    \
         	is_fallback = 0; \
     	} \
+    	int active_txs; \
     	while (1) { \
-    		int aux_count = active_count; \
-    		if (__sync_bool_compare_and_swap(&active_count, aux_count, aux_count - 1)) { \
+    		active_txs = active_count; \
+    		if (__sync_bool_compare_and_swap(&active_count, active_txs, active_txs - 1)) { \
     			break; \
             } else { \
 				__asm__ ("pause;"); \
             } \
         } \
-		if (!myThreadId) { \
-			commits++; \
-			if (TM_CYCLE_ETA() >= CYCLE_MILLIS) { \
+        int aux_commits; \
+        while (1) { \
+    		int aux_commits = commits; \
+    		if (__sync_bool_compare_and_swap(&commits, aux_commits, aux_commits + 1)) { \
+    			break; \
+            } else { \
+				__asm__ ("pause;"); \
+            } \
+        } \
+		if (TM_CYCLE_ETA() >= CYCLE_MILLIS) { \
+			if (__sync_bool_compare_and_swap(&updating_stats, 0, 1)) { \
 				if(policy == PROBE) { \
 					PROBE_POLICY(); \
 				} else { \
 					THROTTLE_POLICY(); \
 				} \
 				last_cycle_timestamp = CURRENT_TIMESTAMP(); \
+				updating_stats = 0; \
 			} \
 		} \
     }
