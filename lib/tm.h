@@ -232,6 +232,7 @@ typedef unsigned long tm_time_t;
                 } \
             } \
             int status = _xbegin(); \
+	    if (status == _XBEGIN_STARTED) { break; } \
             tries[myThreadId]--; \
             if (!myThreadId) { \
             	aborts++; \
