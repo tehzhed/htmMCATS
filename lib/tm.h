@@ -113,6 +113,8 @@ __attribute__((aligned(64))) unsigned long avg_duration;
 __attribute__((aligned(64))) unsigned int max_attempts;
 __attribute__((aligned(64))) unsigned int current_cycle_locks;
 __attribute__((aligned(64))) unsigned int tries[NUMBER_THREADS];
+__attribute__((aligned(64))) unsigned int active_threads[NUMBER_THREADS];
+__attribute__((aligned(64))) int collector_id;
 
 
 #define CURRENT_TIMESTAMP() ({ \
@@ -271,18 +273,40 @@ typedef unsigned long tm_time_t;
 		max_duration = 0; \
 		avg_duration = 0; \
 		current_cycle_locks = 0; \
+		collector_id = -1; \
 		last_cycle_timestamp = CURRENT_TIMESTAMP(); \
 		memset(tries, 0, sizeof(tries)); \
+		memset(active_threads, 0, sizeof(active_threads)); \
 	}
 
 #  define TM_SHUTDOWN()
 
 #  define TM_THREAD_ENTER() { \
 	printf("id: %i\tthread enter\n", myThreadId); \
+	active_threads[myThreadId] = 1; \
+	if (collector_id == -1) { \
+		if (__sync_bool_compare_and_swap(&collector_id, -1, myThreadId)) { \
+			printf("no collector thread set. new collector thread id is: %i\n", myThreadId); \
+		} \
+	} \
 }
 
 #  define TM_THREAD_EXIT() { \
 	printf("id: %i\tthread exit\n", myThreadId); \
+	active_threads[myThreadId] = 0; \
+	if (collector_id == myThreadId) { \
+		int index; \
+		for (index = 0; index < NUMBER_THREADS; index++) { \
+			if (active_threads[index]) { \
+				collector_id = index; \
+				printf("collector thread changed from %i to %i\n", myThreadId, index); \
+				break; \
+			} \
+		} \
+		if (collector_id == myThreadId) { \
+			collector_id = -1; \
+		} \
+	} \
 }
 
 #  define TM_BEGIN_WAIVER()
@@ -310,7 +334,7 @@ typedef unsigned long tm_time_t;
 		int active_txs; \
 		while(1) { \
 			active_txs=active_count; \
-			if(active_txs<quota || !myThreadId) { \
+			if(active_txs<quota || myThreadId == collector_id) { \
 				if (__sync_bool_compare_and_swap(&active_count, active_txs, active_txs+1)) { \
 					peak = max(peak, active_count); \
 					break; \
@@ -330,11 +354,11 @@ typedef unsigned long tm_time_t;
             int status = _xbegin(); \
             if (status == _XBEGIN_STARTED) { break; } \
             tries[myThreadId]--; \
-            if (!myThreadId) { \
+            if (myThreadId == collector_id) { \
             	aborts++; \
             } \
             if (tries[myThreadId] <= 0) { \
-            	if (!myThreadId) { \
+            	if (myThreadId == collector_id) { \
             		current_cycle_locks++; \
             	} \
             	while (__sync_val_compare_and_swap(&is_fallback, 0, 1) == 1) { \
@@ -347,7 +371,7 @@ typedef unsigned long tm_time_t;
 
 # define TM_END() { \
 		if (tries[myThreadId] > 0) { \
-        	if (IS_LOCKED(is_fallback)) { if (!myThreadId) { aborts++; } _xabort(30); } \
+        	if (IS_LOCKED(is_fallback)) { if (myThreadId == collector_id) { aborts++; } _xabort(30); } \
 			_xend(); \
     	} else {    \
         	is_fallback = 0; \
@@ -361,7 +385,7 @@ typedef unsigned long tm_time_t;
 				__asm__ ("pause;"); \
             } \
         } \
-        if (!myThreadId) { \
+        if (myThreadId == collector_id) { \
 			commits++; \
 			if (TM_CYCLE_ETA() >= CYCLE_MILLIS) { \
 				if(policy == PROBE) { \
@@ -376,7 +400,7 @@ typedef unsigned long tm_time_t;
 
 
 #  define TM_BEGIN_RO()                 TM_BEGIN(0)
-#  define TM_RESTART()                  { if (!myThreadId) { aborts++; } _xabort(0xab); }
+#  define TM_RESTART()                  { if (myThreadId == collector_id) { aborts++; } _xabort(0xab); }
 #  define TM_EARLY_RELEASE(var)
 
 #  define TM_SHARED_READ(var)         (var)
