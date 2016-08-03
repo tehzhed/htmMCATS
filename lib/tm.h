@@ -166,6 +166,12 @@ typedef unsigned long tm_time_t;
 
 #  define TM_THREAD_EXIT() { \
 	printf("id: %i\tthread exit\n", myThreadId); \
+	int index; \
+	for (index = 1; index < NUMBER_THREADS; index++) { \
+		gated[index] = 0; \
+		sem_post(&gateSemaphore[index]); \
+	} \
+	concurrency_window_size = NUMBER_THREADS; \
 }
 
 #  define TM_BEGIN_WAIVER()
