@@ -97,7 +97,7 @@ __attribute__((aligned(64))) tm_state_t state;
 __attribute__((aligned(64))) tm_mode_t mode;
 __attribute__((aligned(64))) unsigned int max_attempts;
 __attribute__((aligned(64))) unsigned int tries[NUMBER_THREADS];
-__attribute__((aligned(64))) unsigned int current_cycle_locks;
+__attribute__((aligned(64))) unsigned long current_cycle_locks;
 
 __attribute__((aligned(64))) static volatile unsigned long gate_lock = 0;
 
