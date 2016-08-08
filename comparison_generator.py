@@ -6,7 +6,7 @@ filename = '../totals'
 folder = '../charts/'
 
 
-x_threads = [2, 3, 4, 5, 6, 7, 8]
+x_threads = [1, 2, 3, 4, 5, 6, 7, 8]
 
 y_f2c2 = []
 y_lock_only = []
