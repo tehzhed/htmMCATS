@@ -90,7 +90,7 @@ __attribute__((aligned(64))) unsigned long  avg_cycle_duration;
 __attribute__((aligned(64))) unsigned long min_num_commits;
 __attribute__((aligned(64))) unsigned long max_num_commits;
 __attribute__((aligned(64))) unsigned long avg_num_commits;
-__attribute__((aligned(64))) unsigned int aborts;
+__attribute__((aligned(64))) unsigned long aborts;
 __attribute__((aligned(64))) unsigned long long num_cycles;
 __attribute__((aligned(64))) unsigned long long thread_stats[NUMBER_THREADS];
 __attribute__((aligned(64))) tm_state_t state;
