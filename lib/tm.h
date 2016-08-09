@@ -297,7 +297,7 @@ typedef unsigned long tm_time_t;
 			if (concurrency_window_size > 1) { \
 				gated[concurrency_window_size - 1] = 1; \
 				concurrency_window_size--; \
-			} else if concurrency_window_size < NUMBER_THREADS { \
+			} else if (concurrency_window_size < NUMBER_THREADS) { \
 				gated[concurrency_window_size] = 0; \
 	 			sem_post(&gateSemaphore[concurrency_window_size]); \
 				concurrency_window_size++; \
@@ -310,7 +310,7 @@ typedef unsigned long tm_time_t;
 				gated[concurrency_window_size - 1] = 1; \
 				concurrency_window_size--; \
 				state = DECREASING; \
-			} else if concurrency_window_size < NUMBER_THREADS { \
+			} else if (concurrency_window_size < NUMBER_THREADS) { \
 				gated[concurrency_window_size] = 0; \
 	 			sem_post(&gateSemaphore[concurrency_window_size]); \
 				concurrency_window_size++; \
