@@ -314,7 +314,7 @@ typedef unsigned long tm_time_t;
 				gated[concurrency_window_size] = 0; \
 	 			sem_post(&gateSemaphore[concurrency_window_size]); \
 				concurrency_window_size++; \
-			}
+			} \
 		} else { \
 			if (concurrency_window_size < NUMBER_THREADS) { \
 	 			gated[concurrency_window_size] = 0; \
