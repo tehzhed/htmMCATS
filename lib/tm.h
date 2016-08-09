@@ -297,7 +297,7 @@ typedef unsigned long tm_time_t;
 			if (concurrency_window_size > 1) { \
 				gated[concurrency_window_size - 1] = 1; \
 				concurrency_window_size--; \
-			}; \
+			} \
 		} \
 	} else { \
 		if (state == INCREASING) { \
