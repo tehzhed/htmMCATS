@@ -82,6 +82,7 @@ __attribute__((aligned(64))) unsigned long startup_timestamp;
 __attribute__((aligned(64))) unsigned long last_cycle_timestamp;
 __attribute__((aligned(64))) unsigned int last_cycle_commits;
 __attribute__((aligned(64))) unsigned int current_cycle_commits;
+__attribute__((aligned(64))) unsigned int normalized_commits;
 __attribute__((aligned(64))) unsigned int gated[NUMBER_THREADS];
 __attribute__((aligned(64))) sem_t gateSemaphore[NUMBER_THREADS];
 __attribute__((aligned(64))) unsigned long  min_cycle_duration;
@@ -151,6 +152,8 @@ typedef unsigned long tm_time_t;
 		avg_concurrency_window_size = 0; \
 		num_cycles = 0; \
 		max_attempts = TOTAL_ATTEMPTS; \
+		current_cycle_commits = 0; \
+		normalized_commits = 0; \
 		current_cycle_locks = 0; \
 		memset(thread_stats, 0, sizeof(thread_stats)); \
 		memset(tries, 0, sizeof(tries)); \
@@ -190,9 +193,9 @@ typedef unsigned long tm_time_t;
 #  define PRINT_STATS() { \
 		printf("==================CYCLE STATS==================\n"); \
 		printf("id = %i\tstate = %i\tcurrent_cwnd = %u\tthreads = %i\taborts = %lu\tlocks = %lu\n", myThreadId, state, concurrency_window_size, NUMBER_THREADS, aborts, current_cycle_locks); \
-		printf("Current Cycle Commits = %u\tLast Cycle Commits = %u\n", current_cycle_commits, last_cycle_commits); \
+		printf("Current Cycle Commits = %u\tLast Cycle Commits = %u\n", normalized_commits, last_cycle_commits); \
 		printf("Cycle duration = %lums\tOverall duration = %lums\n", TM_CYCLE_ETA(), TM_OVERALL_ETA()); \
-		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\t%lu\t%lu\n", current_cycle_commits, concurrency_window_size, TM_OVERALL_ETA(), NUMBER_THREADS, mode == F2C2 ? "F2C2" : "LOCK_ONLY", aborts, current_cycle_locks); \
+		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\t%lu\t%lu\n", normalized_commits, concurrency_window_size, TM_OVERALL_ETA(), NUMBER_THREADS, mode == F2C2 ? "F2C2" : "LOCK_ONLY", aborts, current_cycle_locks); \
 		printf("===============================================\n"); \
 	}
 
@@ -285,7 +288,8 @@ typedef unsigned long tm_time_t;
 
 # define TM_NEW_CWND() { \
 	PRINT_STATS(); \
-    int plus_signal = current_cycle_commits < last_cycle_commits ? 0 : 1; \
+	normalized_commits = current_cycle_commits * concurrency_window_size; \
+    int plus_signal = normalized_commits < last_cycle_commits ? 0 : 1; \
 	if (plus_signal) { \
 		if (state == INCREASING) { \
 			if (concurrency_window_size < NUMBER_THREADS) { \
@@ -335,9 +339,9 @@ typedef unsigned long tm_time_t;
 
 # define REFRESH_STATS() { \
 	num_cycles++; \
-	min_num_commits = min(min_num_commits, current_cycle_commits); \
-	max_num_commits = max(max_num_commits, current_cycle_commits); \
-	avg_num_commits += current_cycle_commits; \
+	min_num_commits = min(min_num_commits, normalized_commits); \
+	max_num_commits = max(max_num_commits, normalized_commits); \
+	avg_num_commits += normalized_commits; \
 	int current_cycle_duration = TM_CYCLE_ETA(); \
 	min_cycle_duration = min(min_cycle_duration, current_cycle_duration); \
 	max_cycle_duration = max(max_cycle_duration, current_cycle_duration); \
@@ -347,8 +351,9 @@ typedef unsigned long tm_time_t;
 	avg_concurrency_window_size += concurrency_window_size; \
 	thread_stats[concurrency_window_size - 1]++; \
 	last_cycle_timestamp = CURRENT_TIMESTAMP(); \
-	last_cycle_commits = current_cycle_commits; \
+	last_cycle_commits = normalized_commits; \
 	current_cycle_commits = 0; \
+	normalized_commits = 0; \
 	current_cycle_locks = 0; \
 	aborts = 0; \
 }
