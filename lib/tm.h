@@ -206,7 +206,7 @@ typedef unsigned long tm_time_t;
 	max_duration = max(max_duration, TM_CYCLE_ETA()); \
 	avg_duration += TM_CYCLE_ETA(); \
 	PRINT_STATS(); \
-	last_commits = commits; \
+	last_commits = normalized_commits; \
 	last_laps = laps; \
 	peak = 0; \
 	commits = 0; \
