@@ -292,6 +292,9 @@ typedef unsigned long tm_time_t;
 	 			gated[concurrency_window_size] = 0; \
 	 			sem_post(&gateSemaphore[concurrency_window_size]); \
 				concurrency_window_size++; \
+			} else if (concurrency_window_size > 1) { \
+				gated[concurrency_window_size - 1] = 1; \
+				concurrency_window_size--; \
 			} \
 		} else { \
 			if (concurrency_window_size > 1) { \
@@ -320,8 +323,11 @@ typedef unsigned long tm_time_t;
 	 			gated[concurrency_window_size] = 0; \
 	 			sem_post(&gateSemaphore[concurrency_window_size]); \
 				concurrency_window_size++; \
+				state = INCREASING; \
+			} else if (concurrency_window_size > 1) { \
+				gated[concurrency_window_size - 1] = 1; \
+				concurrency_window_size--; \
 			} \
-			state = INCREASING; \
 		} \
 	} \
 	REFRESH_STATS(); \
