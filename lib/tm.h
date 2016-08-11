@@ -160,7 +160,7 @@ typedef unsigned long tm_time_t;
 		printf("duration -> min = %lu\t max = %lu\tavg = %lu\n", min_duration, max_duration, avg_duration/num_interval); \
 		if (policy == PROBE) { \
 			printf("laps -> min = %u\t max = %u\tavg = %u\n", min_num_laps, max_num_laps, avg_num_laps/num_interval); \
-			printf("probe direction = %s\n", direccotion == UP ? "UP" : "DOWN"); \
+			printf("probe direction = %s\n", direction == UP ? "UP" : "DOWN"); \
 		} \
 		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\t%lu\t%lu\n", normalized_commits, active_count, TM_OVERALL_ETA(), NUMBER_THREADS, policy == PROBE ? "PROBE" : "THROTTLE", normalized_aborts, current_cycle_locks); \
 		printf("==================================================\n"); \
