@@ -153,7 +153,7 @@ typedef unsigned long tm_time_t;
 #  define PRINT_STATS() { \
 		printf("==================INTERVAL STATS==================\n"); \
 		printf("id = %i\tinterval = %u\tquota = %u\tstalled = %i\tETA = %lu\n", myThreadId, num_interval, quota, stalled, TM_OVERALL_ETA()); \
-		printf("peak = %u\tcommits = %u\tactive count = %u\tthreads = %i\taborts = %lu\tlocks = %lu\n", peak, normalized_commits, active_count, NUMBER_THREADS, normalized_aborts, current_cycle_locks); \
+		printf("peak = %u\tcommits = %u\tactive count = %u\tthreads = %i\taborts = %u\tlocks = %u\n", peak, normalized_commits, active_count, NUMBER_THREADS, normalized_aborts, current_cycle_locks); \
 		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\t%lu\t%lu\n", normalized_commits, active_count, TM_OVERALL_ETA(), NUMBER_THREADS, policy == PROBE ? "PROBE" : "THROTTLE", normalized_aborts, current_cycle_locks); \
 		printf("==================================================\n"); \
 	}
