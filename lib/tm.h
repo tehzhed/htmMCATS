@@ -151,10 +151,11 @@ typedef unsigned long tm_time_t;
 })
 
 #  define PRINT_STATS() { \
+		if (num_interval) { \
 		printf("==================INTERVAL STATS==================\n"); \
 		printf("id = %i\tinterval = %u\tquota = %u\tstalled = %i\tETA = %lu\n", myThreadId, num_interval, quota, stalled, TM_OVERALL_ETA()); \
 		printf("peak = %u\tcommits = %u\tactive count = %u\tthreads = %i\taborts = %lu\tlocks = %lu\n", peak, normalized_commits, active_count, NUMBER_THREADS, normalized_aborts, current_cycle_locks); \
-		printf("commits -> min = %u\t max = %u\tavg = %u\n", min_num_commits, max_num_commits, avg_num_commits/num_interval); \
+		printf("commits -> min = %u\t max = %u\tavg = %llu\n", min_num_commits, max_num_commits, avg_num_commits/num_interval); \
 		printf("aborts -> min = %u\t max = %u\tavg = %u\n", min_num_aborts, max_num_aborts, avg_num_aborts/num_interval); \
 		printf("quota -> min = %u\t max = %u\tavg = %u\n", min_quota, max_quota, avg_quota/num_interval); \
 		printf("duration -> min = %lu\t max = %lu\tavg = %lu\n", min_duration, max_duration, avg_duration/num_interval); \
@@ -164,6 +165,7 @@ typedef unsigned long tm_time_t;
 		} \
 		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\t%lu\t%lu\n", normalized_commits, active_count, TM_OVERALL_ETA(), NUMBER_THREADS, policy == PROBE ? "PROBE" : "THROTTLE", normalized_aborts, current_cycle_locks); \
 		printf("==================================================\n"); \
+		} \
 	}
 
 #  define PROBE_POLICY() { \
@@ -175,9 +177,6 @@ typedef unsigned long tm_time_t;
 	} \
 	laps++; \
 	num_interval++; \
-	if (!last_laps) { \
-		printf("Last laps = 0!"); \
-	} \
 	if (peak < quota) { \
 		quota = peak + 1; \
 		direction = DOWN; \
