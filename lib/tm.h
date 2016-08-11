@@ -84,6 +84,7 @@ __attribute__((aligned(64))) unsigned int active_count;
 __attribute__((aligned(64))) unsigned int commits;
 __attribute__((aligned(64))) unsigned int normalized_commits;
 __attribute__((aligned(64))) unsigned int aborts;
+__attribute__((aligned(64))) unsigned int normalized_aborts;
 __attribute__((aligned(64))) unsigned int quota;
 __attribute__((aligned(64))) unsigned int stalled;
 __attribute__((aligned(64))) unsigned int peak;
@@ -135,7 +136,7 @@ __attribute__((aligned(64))) int collector_id;
 
 #define CYCLE_MILLIS 50
 #define INTERVAL_MICROSECS 50000
-#define WARMUP 1
+#define WARMUP 3
 #define THRESHOLD 0.8
 
 #define NUMBER_CORES sysconf(_SC_NPROCESSORS_ONLN)
@@ -152,7 +153,7 @@ typedef unsigned long tm_time_t;
 #  define PRINT_STATS() { \
 		printf("==================INTERVAL STATS==================\n"); \
 		printf("id = %i\tinterval = %u\tquota = %u\tstalled = %i\tETA = %lu\n", myThreadId, num_interval, quota, stalled, TM_OVERALL_ETA()); \
-		printf("peak = %u\tcommits = %u\tactive count = %u\tthreads = %i\taborts = %lu\tlocks = %lu\n", peak, normalized_commits, active_count, NUMBER_THREADS, aborts, current_cycle_locks); \
+		printf("peak = %u\tcommits = %u\tactive count = %u\tthreads = %i\taborts = %lu\tlocks = %lu\n", peak, normalized_commits, active_count, NUMBER_THREADS, normalized_aborts, current_cycle_locks); \
 		printf("commits -> min = %u\t max = %u\tavg = %u\n", min_num_commits, max_num_commits, avg_num_commits/num_interval); \
 		printf("aborts -> min = %u\t max = %u\tavg = %u\n", min_num_aborts, max_num_aborts, avg_num_aborts/num_interval); \
 		printf("quota -> min = %u\t max = %u\tavg = %u\n", min_quota, max_quota, avg_quota/num_interval); \
@@ -161,14 +162,14 @@ typedef unsigned long tm_time_t;
 			printf("laps -> min = %u\t max = %u\tavg = %u\n", min_num_laps, max_num_laps, avg_num_laps/num_interval); \
 			printf("probe direction = %s\n", direction == UP ? "UP" : "DOWN"); \
 		} \
-		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\t%lu\t%lu\n", normalized_commits, active_count, TM_OVERALL_ETA(), NUMBER_THREADS, policy == PROBE ? "PROBE" : "THROTTLE", aborts, current_cycle_locks); \
+		printf("Chart_data\t%u\t%u\t%lu\t%i\t%s\t%lu\t%lu\n", normalized_commits, active_count, TM_OVERALL_ETA(), NUMBER_THREADS, policy == PROBE ? "PROBE" : "THROTTLE", normalized_aborts, current_cycle_locks); \
 		printf("==================================================\n"); \
 	}
 
 #  define PROBE_POLICY() { \
 	if (!peak && !active_count) { \
 		return; \
-	} else if (normalized_commits + aborts < WARMUP) { \
+	} else if (normalized_commits + normalized_aborts < WARMUP) { \
 		laps++; \
 		return; \
 	} \
@@ -193,9 +194,9 @@ typedef unsigned long tm_time_t;
 	min_num_commits = min(min_num_commits, normalized_commits); \
 	max_num_commits = max(max_num_commits, normalized_commits); \
 	avg_num_commits += normalized_commits; \
-	min_num_aborts = min(min_num_aborts, aborts); \
-	max_num_aborts = max(max_num_aborts, aborts); \
-	avg_num_aborts += aborts; \
+	min_num_aborts = min(min_num_aborts, normalized_aborts); \
+	max_num_aborts = max(max_num_aborts, normalized_aborts); \
+	avg_num_aborts += normalized_aborts; \
 	min_quota = min(min_quota, quota); \
 	max_quota = max(max_quota, quota); \
 	avg_quota += quota; \
@@ -211,17 +212,18 @@ typedef unsigned long tm_time_t;
 	peak = 0; \
 	commits = 0; \
 	normalized_commits = 0; \
+	normalized_aborts = 0; \
 	aborts = 0; \
 	laps = 0; \
 	current_cycle_locks = 0; \
 }
 
 #  define THROTTLE_POLICY() { \
-	if (commits < WARMUP) { \
+	if (normalized_commits < WARMUP) { \
 		return; \
 	} \
 	num_interval++; \
-	float ratio = (float)commits/(commits + aborts); \
+	float ratio = (float)normalized_commits/(normalized_commits + normalized_aborts); \
 	if (peak < quota) { \
 		quota = peak; \
 	} else if (ratio < THRESHOLD) { \
@@ -229,12 +231,12 @@ typedef unsigned long tm_time_t;
 	} else if (stalled) { \
 		quota++; \
 	} \
-	min_num_commits = min(min_num_commits, commits); \
-	max_num_commits = max(max_num_commits, commits); \
-	avg_num_commits += commits; \
-	min_num_aborts = min(min_num_aborts, aborts); \
-	max_num_aborts = max(max_num_aborts, aborts); \
-	avg_num_aborts += aborts; \
+	min_num_commits = min(min_num_commits, normalized_commits); \
+	max_num_commits = max(max_num_commits, normalized_commits); \
+	avg_num_commits += normalized_commits; \
+	min_num_aborts = min(min_num_aborts, normalized_aborts); \
+	max_num_aborts = max(max_num_aborts, normalized_aborts); \
+	avg_num_aborts += normalized_aborts; \
 	min_quota = min(min_quota, quota); \
 	max_quota = max(max_quota, quota); \
 	avg_quota += quota; \
@@ -246,6 +248,7 @@ typedef unsigned long tm_time_t;
 	commits = 0; \
 	normalized_commits = 0; \
 	aborts = 0; \
+	normalized_aborts = 0; \
 	stalled = 0; \
 	current_cycle_locks = 0; \
 }
@@ -263,7 +266,9 @@ typedef unsigned long tm_time_t;
 		quota = 1; \
 		peak = 0; \
 		commits = 0; \
+		normalized_commits = 0; \
 		aborts = 0; \
+		normalized_aborts = 0; \
 		stalled = 0; \
 		num_interval = 0; \
 		min_num_commits = 0; \
@@ -391,6 +396,7 @@ typedef unsigned long tm_time_t;
         if (myThreadId == collector_id) { \
 			commits++; \
 			if (TM_CYCLE_ETA() >= CYCLE_MILLIS) { \
+				normalized_aborts = aborts * quota; \
 				normalized_commits = commits * quota; \
 				if(policy == PROBE) { \
 					PROBE_POLICY(); \
