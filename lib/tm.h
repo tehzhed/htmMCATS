@@ -173,51 +173,52 @@ typedef unsigned long tm_time_t;
 
 #  define PROBE_POLICY() { \
 	if (!peak && !active_count) { \
-		return; \
+		\
 	} else if (normalized_commits + normalized_aborts < WARMUP) { \
 		laps++; \
-		return; \
-	} \
-	laps++; \
-	num_interval++; \
-	if (peak < quota) { \
-		quota = peak + 1; \
-		direction = DOWN; \
-	} else if (quota == 1) { \
-		direction = UP; \
-	} else if ((float)normalized_commits/laps < (float)last_commits/last_laps) { \
-		direction = direction == UP ? DOWN : UP; \
-	} \
-	if (direction == DOWN) { \
-		quota--; \
+			\
 	} else { \
-		quota++; \
+		laps++; \
+		num_interval++; \
+		if (peak < quota) { \
+			quota = peak + 1; \
+			direction = DOWN; \
+		} else if (quota == 1) { \
+			direction = UP; \
+		} else if ((float)normalized_commits/laps < (float)last_commits/last_laps) { \
+			direction = direction == UP ? DOWN : UP; \
+		} \
+		if (direction == DOWN) { \
+			quota--; \
+		} else { \
+			quota++; \
+		} \
+		min_num_commits = min(min_num_commits, normalized_commits); \
+		max_num_commits = max(max_num_commits, normalized_commits); \
+		avg_num_commits += normalized_commits; \
+		min_num_aborts = min(min_num_aborts, normalized_aborts); \
+		max_num_aborts = max(max_num_aborts, normalized_aborts); \
+		avg_num_aborts += normalized_aborts; \
+		min_quota = min(min_quota, quota); \
+		max_quota = max(max_quota, quota); \
+		avg_quota += quota; \
+		min_num_laps = min(min_num_laps, laps); \
+		max_num_laps = max(max_num_laps, laps); \
+		avg_num_laps += laps; \
+		min_duration = min(min_duration, TM_CYCLE_ETA()); \
+		max_duration = max(max_duration, TM_CYCLE_ETA()); \
+		avg_duration += TM_CYCLE_ETA(); \
+		PRINT_STATS(); \
+		last_commits = normalized_commits; \
+		last_laps = laps; \
+		peak = 0; \
+		commits = 0; \
+		normalized_commits = 0; \
+		normalized_aborts = 0; \
+		aborts = 0; \
+		laps = 0; \
+		current_cycle_locks = 0; \
 	} \
-	min_num_commits = min(min_num_commits, normalized_commits); \
-	max_num_commits = max(max_num_commits, normalized_commits); \
-	avg_num_commits += normalized_commits; \
-	min_num_aborts = min(min_num_aborts, normalized_aborts); \
-	max_num_aborts = max(max_num_aborts, normalized_aborts); \
-	avg_num_aborts += normalized_aborts; \
-	min_quota = min(min_quota, quota); \
-	max_quota = max(max_quota, quota); \
-	avg_quota += quota; \
-	min_num_laps = min(min_num_laps, laps); \
-	max_num_laps = max(max_num_laps, laps); \
-	avg_num_laps += laps; \
-	min_duration = min(min_duration, TM_CYCLE_ETA()); \
-	max_duration = max(max_duration, TM_CYCLE_ETA()); \
-	avg_duration += TM_CYCLE_ETA(); \
-	PRINT_STATS(); \
-	last_commits = normalized_commits; \
-	last_laps = laps; \
-	peak = 0; \
-	commits = 0; \
-	normalized_commits = 0; \
-	normalized_aborts = 0; \
-	aborts = 0; \
-	laps = 0; \
-	current_cycle_locks = 0; \
 }
 
 #  define THROTTLE_POLICY() { \
