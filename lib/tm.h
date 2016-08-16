@@ -301,6 +301,7 @@ typedef unsigned long tm_time_t;
 	printf("id: %i\tthread exit\n", myThreadId); \
 	active_threads[myThreadId] = 0; \
 	if (!myThreadId) { \
+		printf("thread %i exiting. setting quota to %i", myThreadId, NUMBER_THREADS); \
 		quota = NUMBER_THREADS; \
 	} \
 }
