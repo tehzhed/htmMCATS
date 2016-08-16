@@ -137,7 +137,7 @@ __attribute__((aligned(64))) int collector_id;
 #define CYCLE_MILLIS 50
 #define INTERVAL_MICROSECS 50000
 #define WARMUP 5
-#define THRESHOLD 0.8
+#define THRESHOLD 0.6
 
 #define NUMBER_CORES sysconf(_SC_NPROCESSORS_ONLN)
 
