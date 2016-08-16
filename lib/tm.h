@@ -285,6 +285,7 @@ typedef unsigned long tm_time_t;
 		current_cycle_locks = 0; \
 		collector_id = -1; \
 		last_cycle_timestamp = CURRENT_TIMESTAMP(); \
+		startup_timestamp = CURRENT_TIMESTAMP(); \
 		memset(tries, 0, sizeof(tries)); \
 		memset(active_threads, 0, sizeof(active_threads)); \
 	}
