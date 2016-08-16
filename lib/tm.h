@@ -221,38 +221,37 @@ typedef unsigned long tm_time_t;
 }
 
 #  define THROTTLE_POLICY() { \
-	if (normalized_commits < WARMUP) { \
-		return; \
+	if (normalized_commits >= WARMUP) { \
+		num_interval++; \
+		float ratio = (float)normalized_commits/(normalized_commits + normalized_aborts); \
+		if (peak < quota) { \
+			quota = peak; \
+		} else if (ratio < THRESHOLD) { \
+			quota--; \
+		} else if (stalled) { \
+			quota++; \
+		} \
+		min_num_commits = min(min_num_commits, normalized_commits); \
+		max_num_commits = max(max_num_commits, normalized_commits); \
+		avg_num_commits += normalized_commits; \
+		min_num_aborts = min(min_num_aborts, normalized_aborts); \
+		max_num_aborts = max(max_num_aborts, normalized_aborts); \
+		avg_num_aborts += normalized_aborts; \
+		min_quota = min(min_quota, quota); \
+		max_quota = max(max_quota, quota); \
+		avg_quota += quota; \
+		min_duration = min(min_duration, TM_CYCLE_ETA()); \
+		max_duration = max(max_duration, TM_CYCLE_ETA()); \
+		avg_duration += TM_CYCLE_ETA(); \
+		PRINT_STATS(); \
+		peak = 0; \
+		commits = 0; \
+		normalized_commits = 0; \
+		aborts = 0; \
+		normalized_aborts = 0; \
+		stalled = 0; \
+		current_cycle_locks = 0; \
 	} \
-	num_interval++; \
-	float ratio = (float)normalized_commits/(normalized_commits + normalized_aborts); \
-	if (peak < quota) { \
-		quota = peak; \
-	} else if (ratio < THRESHOLD) { \
-		quota--; \
-	} else if (stalled) { \
-		quota++; \
-	} \
-	min_num_commits = min(min_num_commits, normalized_commits); \
-	max_num_commits = max(max_num_commits, normalized_commits); \
-	avg_num_commits += normalized_commits; \
-	min_num_aborts = min(min_num_aborts, normalized_aborts); \
-	max_num_aborts = max(max_num_aborts, normalized_aborts); \
-	avg_num_aborts += normalized_aborts; \
-	min_quota = min(min_quota, quota); \
-	max_quota = max(max_quota, quota); \
-	avg_quota += quota; \
-	min_duration = min(min_duration, TM_CYCLE_ETA()); \
-	max_duration = max(max_duration, TM_CYCLE_ETA()); \
-	avg_duration += TM_CYCLE_ETA(); \
-	PRINT_STATS(); \
-	peak = 0; \
-	commits = 0; \
-	normalized_commits = 0; \
-	aborts = 0; \
-	normalized_aborts = 0; \
-	stalled = 0; \
-	current_cycle_locks = 0; \
 }
 
 #  define SET_POLICY(p) { \
@@ -283,7 +282,7 @@ typedef unsigned long tm_time_t;
 		max_duration = 0; \
 		avg_duration = 0; \
 		current_cycle_locks = 0; \
-		collector_id = -1; \
+		collector_id = -1i; \
 		last_cycle_timestamp = CURRENT_TIMESTAMP(); \
 		startup_timestamp = CURRENT_TIMESTAMP(); \
 		memset(tries, 0, sizeof(tries)); \
@@ -297,7 +296,7 @@ typedef unsigned long tm_time_t;
 	active_threads[myThreadId] = 1; \
 	if (collector_id == -1) { \
 		if (__sync_bool_compare_and_swap(&collector_id, -1, myThreadId)) { \
-			printf("no collector thread set. new collector thread id is: %i\n", myThreadId); \
+			printf("no collector thread set. new collector thread id is: %i\n", collector_id); \
 		} \
 	} \
 }
