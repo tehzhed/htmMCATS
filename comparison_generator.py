@@ -51,6 +51,35 @@ for benchmark in stats:
 
     plt.close()
 
+    if len(stats[benchmark]['f2c2']) == 32:
+        y_f2c2 = stats[benchmark]['f2c2'][16:32]
+        y_lock_only = stats[benchmark]['lock-only'][16:32]
+        y_probe = stats[benchmark]['probe'][16:32]
+        y_throttle = stats[benchmark]['throttle'][16:32]
+
+        plt.xlabel('Maximum Concurrency Specification')
+        plt.ylabel('Execution Time (seconds)')
+
+        plt.suptitle(benchmark + '-low')
+
+        plt.plot(x_threads, y_f2c2, 'b-', label='F2C2')
+        plt.plot(x_threads, y_lock_only, 'g-', label='None')
+        plt.plot(x_threads, y_probe, 'r-', label='Probe')
+        plt.plot(x_threads, y_throttle, 'c-', label='Throttle')
+
+        plt.legend(loc='upper center', fontsize='smaller', bbox_to_anchor=(0.5, 1.05),
+                  ncol=4, fancybox=True, shadow=True)
+
+        fig = plt.gcf()
+
+        plt.show()
+
+        fig.savefig(folder+'totals_'+benchmark+'.png')
+        # pylab.savefig(folder+'commits_'+program+'_'+mode+'_'+threads+'.pdf')
+
+        plt.close()
+
+
 # y_f2c2 = []
 # y_lock_only = []
 # y_probe = []
