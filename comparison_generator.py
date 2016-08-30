@@ -74,7 +74,7 @@ for benchmark in stats:
 
         plt.show()
 
-        fig.savefig(folder+'totals_'+benchmark+'.png')
+        fig.savefig(folder+'totals_'+benchmark+'-low.png')
         # pylab.savefig(folder+'commits_'+program+'_'+mode+'_'+threads+'.pdf')
 
         plt.close()
