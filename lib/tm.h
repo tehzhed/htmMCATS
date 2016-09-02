@@ -85,7 +85,7 @@ __attribute__((aligned(64))) unsigned int commits;
 __attribute__((aligned(64))) unsigned int normalized_commits;
 __attribute__((aligned(64))) unsigned int aborts;
 __attribute__((aligned(64))) unsigned int normalized_aborts;
-__attribute__((aligned(64))) static volatile unsigned int quota;
+__attribute__((aligned(64))) volatile unsigned int quota;
 __attribute__((aligned(64))) unsigned int stalled;
 __attribute__((aligned(64))) unsigned int peak;
 __attribute__((aligned(64))) unsigned int laps;
