@@ -80,11 +80,11 @@ typedef enum {
 } tm_direction_t;
 
 __attribute__((aligned(64))) static volatile unsigned long begin_lock = 0;
-__attribute__((aligned(64))) unsigned int active_count;
-__attribute__((aligned(64))) unsigned int commits;
-__attribute__((aligned(64))) unsigned int normalized_commits;
-__attribute__((aligned(64))) unsigned int aborts;
-__attribute__((aligned(64))) unsigned int normalized_aborts;
+__attribute__((aligned(64))) volatile unsigned int active_count;
+__attribute__((aligned(64))) volatile unsigned int commits;
+__attribute__((aligned(64))) volatile unsigned int normalized_commits;
+__attribute__((aligned(64))) volatile unsigned int aborts;
+__attribute__((aligned(64))) volatile unsigned int normalized_aborts;
 __attribute__((aligned(64))) volatile unsigned int quota;
 __attribute__((aligned(64))) unsigned int stalled;
 __attribute__((aligned(64))) unsigned int peak;
