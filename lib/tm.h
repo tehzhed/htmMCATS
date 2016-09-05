@@ -74,7 +74,7 @@ typedef enum {
 	F2C2
 } tm_mode_t;
 
-__attribute__((aligned(64))) unsigned int concurrency_window_size;
+__attribute__((aligned(64))) volatile unsigned int concurrency_window_size;
 __attribute__((aligned(64))) unsigned int min_concurrency_window_size;
 __attribute__((aligned(64))) unsigned int max_concurrency_window_size;
 __attribute__((aligned(64))) unsigned long long avg_concurrency_window_size;
