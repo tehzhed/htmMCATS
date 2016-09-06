@@ -232,6 +232,7 @@ typedef unsigned long tm_time_t;
 		} else if (stalled) { \
 			quota++; \
 		} \
+		quota = max(quota, 1); \
 		min_num_commits = min(min_num_commits, normalized_commits); \
 		max_num_commits = max(max_num_commits, normalized_commits); \
 		avg_num_commits += normalized_commits; \
